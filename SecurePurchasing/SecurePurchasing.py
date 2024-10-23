@@ -19,46 +19,107 @@ app.secret_key = os.urandom(24)
 # Database connection configuration
 DRIVER_NAME = 'SQL SERVER'
 SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+#SERVER_NAME = 'LAPTOP-JP2PAISQ'
+DATABASE_NAME = 'SecurePurchase'
 
+connection_string = f"""
+    DRIVER={{{DRIVER_NAME}}};
+    SERVER={SERVER_NAME};
+    DATABASE={DATABASE_NAME};
+    Trust_Connection=yes;
+     uid=Kylee;
+    pwd=1234;
+"""
+
+def connect_to_database():
+    conn = odbc.connect(connection_string)
+    return conn
+
+# User class implementing UserMixin
+class User(UserMixin):
+    def __init__(self, user_id):
+        self.id = user_id
+
+# Function to check user credentials
+def check_credentials(username, password, userID):
+    conn = connect_to_database()
+    cursor = conn.cursor()
+
+    #encrypted_ssn = encrypt_data(ssn)
+    #hex_encrypted_ssn = binascii.hexlify(encrypted_ssn).decode()
+
+    query = f"SELECT * FROM LoginInfo WHERE Username = ? AND Password = ? AND UserID = ?"
+    cursor.execute(query, (username, password, userID ))
+    user_id = cursor.fetchone()
+    conn.close()
+    return user_id
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User(user_id)
 
 @app.route('/')
 def login():
     return render_template('Login.html')
 
+@app.route('/login_form', methods=['POST'])
+def login_form():
+   
+    username = request.form.get('Username')
+    password = request.form.get('password')
+    ID = request.form.get('ID')
+    user_info = check_credentials(username, password, ID)
+    if user_info:
+        user_id = user_info[0]  # Get the fifth item from the tuple (index starts from 0)
+        user = User(user_id)
+        login_user(user)
+        return redirect(url_for('employee'))
+    else:
+        return render_template('Login.html', info='Invalid User or Password')
+     #   user_id = check_credentials(username, password, ssn)
+  #  if user_id:
+   #     user = User(user_id)
+    #    login_user(user)
+     #   return redirect(url_for('home'))
+  #  else:
+   #     return render_template('login.html', info='Invalid User or Password')
+
+# Route to get the current user's ID
+@app.route('/current_user_id')
+def get_current_user_id():
+    if current_user.is_authenticated:
+        return f"Current user ID: {current_user.id}"
+    else:
+        return "No user logged in"
+
+
+@app.route('/employee')
+@login_required
+def employee():
+    return render_template('Employee.html')
+
+@app.route('/manager')
+def manager():
+    return render_template('Manager.html')
+
+@app.route('/purchasingDept')
+def purchasingDept():
+    return render_template('PurchasingDept.html')
+
 if __name__ == '__main__':
     app.run(debug=True)
     
-#SERVER_NAME = 'LAPTOP-JP2PAISQ'
-#DATABASE_NAME = 'CLA'
-#DATABASE_NAME_CTF = 'CTF'
-
-# connection_string = f"""
-#     DRIVER={{{DRIVER_NAME}}};
-#     SERVER={SERVER_NAME};
-#     DATABASE={DATABASE_NAME};
-#     Trust_Connection=yes;
-#      uid=Kylee;
-#     pwd=1234;
-# """
-
-# connection_string_ctf = f"""
-#     DRIVER={{{DRIVER_NAME}}};
-#     SERVER={SERVER_NAME};
-#     DATABASE={DATABASE_NAME_CTF};
-#     Trust_Connection=yes;
-#      uid=Kylee;
-#     pwd=1234;
-# """
 
 
-# def connect_to_database():
-#     conn = odbc.connect(connection_string)
-#     return conn
 
-# # Function to connect to the database
-# def connect_to_CTF_database():
-#     conn = odbc.connect(connection_string_ctf)
-#     return conn
+
+
+
+
 
 # # User class implementing UserMixin
 # class User(UserMixin):

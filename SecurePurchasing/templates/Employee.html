@@ -17,10 +17,10 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background: linear-gradient(135deg, #5959c0, #acb6e5);
+            background: linear-gradient(135deg, #17173c, #acb6e5);
         }
 
-        .login-container {
+        .Approval-container {
             background-color: #fff;
             padding: 2rem;
             border-radius: 12px;
@@ -28,13 +28,13 @@
             width: 350px;
         }
 
-        .login-container h2 {
+        .Approval-container h2 {
             text-align: center;
             margin-bottom: 1.5rem;
             color: #333;
         }
 
-        .login-container form {
+        .Approval-container form {
             display: flex;
             flex-direction: column;
         }
@@ -64,9 +64,9 @@
             outline: none;
         }
 
-        .login-container button {
+        .Approval-container button {
             padding: 0.75rem;
-            background-color: #5959c0;
+            background-color: #17173c;
             border: none;
             border-radius: 8px;
             font-size: 1rem;
@@ -75,45 +75,44 @@
             transition: background-color 0.3s;
         }
 
-        .login-container button:hover {
-            background-color: #5959c0;
+        .Approval-container button:hover {
+            background-color: #17173c;
         }
 
-        .login-container p {
+        .Approval-container p {
             text-align: center;
             margin-top: 1rem;
             color: #777;
             font-size: 0.9rem;
         }
 
-        .login-container p a {
-            color: #5959c0;
+        .Approval-container p a {
+            color: #17173c;
             text-decoration: none;
         }
 
-        .login-container p a:hover {
+        .Approval-container p a:hover {
             text-decoration: underline;
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <h2>Login</h2>
-        <form action="/login_form" method="post">
+    <div class="Approval-container">
+        <h2>Approval Request</h2>
+        <form>
             <div class="form-group">
-                <label for="Username">Username</label>
-                <input type="text" id="Username" name="Username" placeholder="Enter your email" required>
+                <label for="Item">Item</label>
+                <input type="Item" id="item" placeholder="Enter your item" required>
             </div>
             <div class="form-group">
-                <label for="password">Password</label>
-                <input type="text" id="password" name="password" placeholder="Enter your password" required>
+                <label for="Quantity">Quantity</label>
+                <input type="Quantity" id="Quantity" placeholder="Amount" required>
             </div>
             <div class="form-group">
-                <label for="ID">ID</label>
-                <input type="text" id="ID" name="ID" placeholder="Enter your ID" required>
+                <label for="Price">Price</label>
+                <input type="Price" id="Price" placeholder="$00.00" required>
             </div>
-            <button type="submit">Login</button>
-            <!-- <p>Don't have an account? <a href="#">Sign up</a></p> -->
+            <button type="submit">Submit Request</button>
         </form>
     </div>
 </body>
