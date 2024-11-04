@@ -10,6 +10,7 @@ from cryptography.hazmat.backends import default_backend
 import binascii
 import random
 import array
+from datetime import datetime
 
 
 
@@ -18,18 +19,32 @@ app.secret_key = os.urandom(24)
 
 # Database connection configuration
 DRIVER_NAME = 'SQL SERVER'
-SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+#SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+SERVER_NAME = 'ARIESPC'
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
 DATABASE_NAME = 'SecurePurchase'
 
+# Kylee Connection String
+#connection_string = f"""
+#    DRIVER={{{DRIVER_NAME}}};
+#    SERVER={SERVER_NAME};
+#    DATABASE={DATABASE_NAME};
+#    Trust_Connection=yes;
+#     uid=Kylee;
+#    pwd=1234;
+#"""
+
+# Albert Connection String
 connection_string = f"""
     DRIVER={{{DRIVER_NAME}}};
     SERVER={SERVER_NAME};
     DATABASE={DATABASE_NAME};
     Trust_Connection=yes;
-     uid=Kylee;
+     uid=Aeris;
     pwd=1234;
 """
+
+
 
 def connect_to_database():
     conn = odbc.connect(connection_string)
@@ -97,9 +112,37 @@ def get_current_user_id():
         return "No user logged in"
 
 
-@app.route('/employee')
+@app.route('/employee', methods=['GET', 'POST'])
 @login_required
 def employee():
+    if request.method == 'POST':
+        item = request.form.get('item')
+        price = request.form.get('Price')
+        quantity = request.form.get('Quantity')
+        requestID = random.randint(1000, 9999)
+        timeRequested = datetime.now()
+
+        try:
+            with odbc.connect(connection_string) as conn:
+                cursor = conn.cursor()
+
+                # Fetch the employee name using the current user's ID
+                employee_query = "SELECT Employee FROM Employees WHERE UserId = ?"
+                cursor.execute(employee_query, (current_user.id,))
+                row = cursor.fetchone()
+
+                # Extract the employee name from the row tuple
+                employee = row[0]
+
+                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, timeRequested) VALUES (?, ?, ?, ?, ?, ?)")
+                cursor.execute(query1, (employee, item, price, quantity, requestID, timeRequested))
+                conn.commit()
+                
+                return redirect(url_for('employee'))
+
+        except Exception as e:
+            print(f"Error: {e}")
+   
     return render_template('Employee.html')
 
 @app.route('/manager')
