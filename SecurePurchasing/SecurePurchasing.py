@@ -23,26 +23,26 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-#SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-#connection_string = f"""
-#   DRIVER={{{DRIVER_NAME}}};
-#   SERVER={SERVER_NAME};
-#   DATABASE={DATABASE_NAME};
-#   Trust_Connection=yes;
-#    uid=Kylee;
-#   pwd=1234;
-#"""
+SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+connection_string = f"""
+  DRIVER={{{DRIVER_NAME}}};
+  SERVER={SERVER_NAME};
+  DATABASE={DATABASE_NAME};
+  Trust_Connection=yes;
+   uid=Kylee;
+  pwd=1234;
+"""
 
 # Albert Connection String
-SERVER_NAME = 'ARIESPC'
-connection_string = f"""
-    DRIVER={{{DRIVER_NAME}}};
-    SERVER={SERVER_NAME};
-    DATABASE={DATABASE_NAME};
-    Trust_Connection=yes;
-     uid=Aeris;
-    pwd=1234;
-"""
+# SERVER_NAME = 'ARIESPC'
+# connection_string = f"""
+#     DRIVER={{{DRIVER_NAME}}};
+#     SERVER={SERVER_NAME};
+#     DATABASE={DATABASE_NAME};
+#     Trust_Connection=yes;
+#      uid=Aeris;
+#     pwd=1234;
+# """
 
 # JJ's Connection String
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
@@ -261,6 +261,12 @@ def manager():
 @role_required('FinancialApprover')
 def purchasingDept():
     return render_template('PurchasingDept.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))  # Redirect to the login page
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Page</title>
+    <title>Employee Page</title>
     <style>
         * {
             margin: 0;
@@ -18,6 +18,26 @@
             justify-content: center;
             align-items: center;
             background: linear-gradient(135deg, #17173c, #acb6e5);
+            position: relative; /* Important for the logout button positioning */
+        }
+
+        /* Style for the Logout Button */
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 0.5rem 1rem;
+            background-color: #f44336; /* Red color for the logout button */
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .logout-btn:hover {
+            background-color: #e53935; /* Darker red on hover */
         }
 
         .Approval-container {
@@ -97,23 +117,28 @@
     </style>
 </head>
 <body>
+
+    <!-- Log Out Button -->
+    <button class="logout-btn" onclick="window.location.href='/logout'">Log Out</button>
+
     <div class="Approval-container">
         <h2>Approval Request</h2>
         <form>
             <div class="form-group">
                 <label for="Item">Item</label>
-                <input type="Item" id="item" placeholder="Enter your item" required>
+                <input type="text" id="item" placeholder="Enter your item" required>
             </div>
             <div class="form-group">
                 <label for="Quantity">Quantity</label>
-                <input type="Quantity" id="Quantity" placeholder="Amount" required>
+                <input type="number" id="Quantity" placeholder="Amount" required>
             </div>
             <div class="form-group">
                 <label for="Price">Price</label>
-                <input type="Price" id="Price" placeholder="$00.00" required>
+                <input type="text" id="Price" placeholder="$00.00" required>
             </div>
             <button type="submit">Submit Request</button>
         </form>
     </div>
+
 </body>
 </html>

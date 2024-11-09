@@ -18,6 +18,26 @@
             justify-content: center;
             align-items: center;
             background: linear-gradient(135deg, #17173c, #acb6e5);
+            position: relative; /* Important for logout button positioning */
+        }
+
+        /* Style for the Logout Button */
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 0.5rem 1rem;
+            background-color: #f44336; /* Red color for the logout button */
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .logout-btn:hover {
+            background-color: #e53935; /* Darker red on hover */
         }
 
         .purchase-container {
@@ -97,28 +117,32 @@
     </style>
 </head>
 <body>
+    <!-- Log Out Button -->
+    <button class="logout-btn" onclick="window.location.href='/logout'">Log Out</button>
+
     <div class="purchase-container">
         <h2>Purchase Approval</h2>
         <form>
             <div class="form-group">
                 <label for="Employee">Employee</label>
-                <input type="Employee" id="Employee" placeholder="Name" required>
+                <input type="text" id="Employee" placeholder="Name" required>
             </div>
             <div class="form-group">
                 <label for="Item">Item</label>
-                <output type="Item" id="item" placeholder="Item" required>
+                <output type="text" id="item" placeholder="Item" required></output>
             </div>
             <div class="form-group">
                 <label for="Quantity">Quantity</label>
-                <input type="Quantity" id="Quantity" placeholder="Amount" required>
+                <input type="number" id="Quantity" placeholder="Amount" required>
             </div>
             <div class="form-group">
                 <label for="Price">Price</label>
-                <input type="Price" id="Price" placeholder="$00.00" required>
+                <input type="text" id="Price" placeholder="$00.00" required>
             </div>
             <button type="submit">Submit Approval</button>
             <p>Need to make a request? <a href="{{ url_for('employee') }}">Request Here</a></p>
         </form>
     </div>
+
 </body>
 </html>
