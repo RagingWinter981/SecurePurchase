@@ -18,21 +18,6 @@ app.secret_key = os.urandom(24)
 
 # Database connection configuration
 DRIVER_NAME = 'SQL SERVER'
-<<<<<<< Updated upstream
-SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-#SERVER_NAME = 'LAPTOP-JP2PAISQ'
-DATABASE_NAME = 'SecurePurchase'
-
-connection_string = f"""
-    DRIVER={{{DRIVER_NAME}}};
-    SERVER={SERVER_NAME};
-    DATABASE={DATABASE_NAME};
-    Trust_Connection=yes;
-     uid=Kylee;
-    pwd=1234;
-"""
-
-=======
 DATABASE_NAME = 'SecurePurchase'
 
 
@@ -71,7 +56,6 @@ connection_string = f"""
 
 
 #connecting to the DB
->>>>>>> Stashed changes
 def connect_to_database():
     conn = odbc.connect(connection_string)
     return conn
@@ -181,12 +165,8 @@ def get_current_user_id():
         return "No user logged in"
 
 
-<<<<<<< Updated upstream
-@app.route('/employee')
-=======
 @app.route('/employee', methods=['GET', 'POST'])
 @role_required(['Employee', 'Manager', 'FinancialApprover'])
->>>>>>> Stashed changes
 @login_required
 def employee():
     return render_template('Employee.html')
