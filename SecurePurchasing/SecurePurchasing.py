@@ -11,6 +11,7 @@ from cryptography.hazmat.backends import default_backend
 import binascii
 import random
 import array
+from datetime import datetime
 
 
 app = Flask(__name__)
@@ -22,26 +23,26 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-connection_string = f"""
-   DRIVER={{{DRIVER_NAME}}};
-   SERVER={SERVER_NAME};
-   DATABASE={DATABASE_NAME};
-   Trust_Connection=yes;
-    uid=Kylee;
-   pwd=1234;
-"""
+#SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+#connection_string = f"""
+#   DRIVER={{{DRIVER_NAME}}};
+#   SERVER={SERVER_NAME};
+#   DATABASE={DATABASE_NAME};
+#   Trust_Connection=yes;
+#    uid=Kylee;
+#   pwd=1234;
+#"""
 
 # Albert Connection String
-#SERVER_NAME = 'ARIESPC'
-# connection_string = f"""
-#     DRIVER={{{DRIVER_NAME}}};
-#     SERVER={SERVER_NAME};
-#     DATABASE={DATABASE_NAME};
-#     Trust_Connection=yes;
-#      uid=Aeris;
-#     pwd=1234;
-# """
+SERVER_NAME = 'ARIESPC'
+connection_string = f"""
+    DRIVER={{{DRIVER_NAME}}};
+    SERVER={SERVER_NAME};
+    DATABASE={DATABASE_NAME};
+    Trust_Connection=yes;
+     uid=Aeris;
+    pwd=1234;
+"""
 
 # JJ's Connection String
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
@@ -68,6 +69,28 @@ class User(UserMixin):
 
     def has_role(self, role):    #Using Role
         return self.role == role
+
+# Function to encrypt data AES-128 using cryptography
+def encrypt_data(data):
+    key = b'\xfd\x91\xdb\xdc\x9d\x9a\xb5\x86\x18\xab\xf4\x9c\x85\xd1\x1d\xff'
+    iv = b'\x82\x0b\xa9\x3d\x9b\x0e\x9a\x1c\x3c\xee\x4a\xf1\x98\x36\xcd\xd7'
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    padder = padding.PKCS7(128).padder()
+    padded_data = padder.update(data.encode()) + padder.finalize()
+    ciphertext = encryptor.update(padded_data) + encryptor.finalize()
+    return ciphertext
+
+# Function to decrypt data AES-128 using cryptography
+def decrypt_data(ciphertext):
+    key = b'\xfd\x91\xdb\xdc\x9d\x9a\xb5\x86\x18\xab\xf4\x9c\x85\xd1\x1d\xff'
+    iv = b'\x82\x0b\xa9\x3d\x9b\x0e\x9a\x1c\x3c\xee\x4a\xf1\x98\x36\xcd\xd7'
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
+    unpadder = padding.PKCS7(128).unpadder()
+    unpadded_data = unpadder.update(decrypted_data) + unpadder.finalize()
+    return unpadded_data.decode()
 
 # Function to check user credentials
 def check_credentials(username, password, userID):
@@ -169,6 +192,64 @@ def get_current_user_id():
 @role_required(['Employee', 'Manager', 'FinancialApprover'])
 @login_required
 def employee():
+    if request.method == 'POST':
+        item = request.form.get('item')
+        price = request.form.get('Price')
+        quantity = request.form.get('Quantity')
+        requestID = random.randint(1000, 9999)
+        employeeTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        try:
+            with odbc.connect(connection_string) as conn:
+                cursor = conn.cursor()
+
+                # Fetch the employee name using the current user's ID
+                employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+                cursor.execute(employee_query, (current_user.id,))
+                rows = cursor.fetchall()
+
+                row = rows[0]
+
+                # Extract the employee name and manager name from the row tuple
+                employee = row[0]
+                manager = row[1]
+
+                print (row[0], row[1])
+
+                # Encrypts each value using AES-128
+                encrypt_item = encrypt_data(item)
+                encrypt_price = encrypt_data(str(price))
+                encrpt_quantity = encrypt_data(str(quantity))
+                encrypt_requestID = encrypt_data(str(requestID))
+                encrypt_employeeTimeRequest = encrypt_data(str(employeeTimeRequest))
+
+                # Changes the value to hex to put into the database
+                input_item = binascii.hexlify(encrypt_item).decode()
+                input_price = binascii.hexlify(encrypt_price).decode()
+                input_quantity = binascii.hexlify(encrpt_quantity).decode()
+                input_requestID = binascii.hexlify(encrypt_requestID).decode()
+                input_employeeTimeRequest = binascii.hexlify(encrypt_employeeTimeRequest).decode()
+
+                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName) VALUES (?, ?, ?, ?, ?, ?, ?)")
+
+                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
+
+                # Decrypt to verify
+                #decrypted_item = decrypt_data(binascii.unhexlify(input_item))
+                #decrypted_price = decrypt_data(binascii.unhexlify(input_price))
+                #decrypted_quantity = decrypt_data(binascii.unhexlify(input_quantity))
+                #decrypted_requestID = decrypt_data(binascii.unhexlify(input_requestID))
+                #decrypted_employeeTimeRequest = decrypt_data(binascii.unhexlify(input_employeeTimeRequest))
+
+                #print("Decrypted Item:", decrypted_item, "Decrypt Price: ", decrypted_price, "Decrypt Quantity: ", decrypted_quantity, "Decrypt, Request ID: ", decrypted_requestID, "Time Requested: ", decrypted_employeeTimeRequest)
+
+                conn.commit()
+                
+                return redirect(url_for('employee'))
+
+        except Exception as e:
+            print(f"Error: {e}")
+   
     return render_template('Employee.html')
 
 @app.route('/manager')
