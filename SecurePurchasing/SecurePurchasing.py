@@ -1,9 +1,10 @@
 
 import os
-from flask import Flask, render_template, request, url_for, redirect, jsonify
+from flask import Flask, render_template, request, url_for, redirect, jsonify, make_response
 import pypyodbc as odbc
 import secrets
 from flask_login import LoginManager, login_user, login_required, current_user, UserMixin, logout_user
+from functools import wraps
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
@@ -12,12 +13,12 @@ import random
 import array
 
 
-
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
 # Database connection configuration
 DRIVER_NAME = 'SQL SERVER'
+<<<<<<< Updated upstream
 SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
 DATABASE_NAME = 'SecurePurchase'
@@ -31,22 +32,63 @@ connection_string = f"""
     pwd=1234;
 """
 
+=======
+DATABASE_NAME = 'SecurePurchase'
+
+
+# Kylee Connection String
+SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+connection_string = f"""
+   DRIVER={{{DRIVER_NAME}}};
+   SERVER={SERVER_NAME};
+   DATABASE={DATABASE_NAME};
+   Trust_Connection=yes;
+    uid=Kylee;
+   pwd=1234;
+"""
+
+# Albert Connection String
+#SERVER_NAME = 'ARIESPC'
+# connection_string = f"""
+#     DRIVER={{{DRIVER_NAME}}};
+#     SERVER={SERVER_NAME};
+#     DATABASE={DATABASE_NAME};
+#     Trust_Connection=yes;
+#      uid=Aeris;
+#     pwd=1234;
+# """
+
+# JJ's Connection String
+#SERVER_NAME = 'LAPTOP-JP2PAISQ'
+# connection_string = f"""
+#     DRIVER={{{DRIVER_NAME}}};
+#     SERVER={SERVER_NAME};
+#     DATABASE={DATABASE_NAME};
+#     Trust_Connection=yes;
+#      uid=;
+#     pwd=;
+# """
+
+
+#connecting to the DB
+>>>>>>> Stashed changes
 def connect_to_database():
     conn = odbc.connect(connection_string)
     return conn
 
 # User class implementing UserMixin
 class User(UserMixin):
-    def __init__(self, user_id):
+    def __init__(self, user_id, role=None): #Using login session
         self.id = user_id
+        self.role = role
+
+    def has_role(self, role):    #Using Role
+        return self.role == role
 
 # Function to check user credentials
 def check_credentials(username, password, userID):
     conn = connect_to_database()
     cursor = conn.cursor()
-
-    #encrypted_ssn = encrypt_data(ssn)
-    #hex_encrypted_ssn = binascii.hexlify(encrypted_ssn).decode()
 
     query = f"SELECT * FROM LoginInfo WHERE Username = ? AND Password = ? AND UserID = ?"
     cursor.execute(query, (username, password, userID ))
@@ -54,13 +96,47 @@ def check_credentials(username, password, userID):
     conn.close()
     return user_id
 
+def check_role(userID):
+    conn = connect_to_database()
+    cursor = conn.cursor()
+
+    query = f"Select EmployeeType From Employees Where UserId = ?"
+    cursor.execute(query, (userID, ))
+    user_role = cursor.fetchone()
+    conn.close()
+    return user_role
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
 
+
 @login_manager.user_loader
 def load_user(user_id):
-    return User(user_id)
+    User_type = check_role(user_id)
+
+    if User_type:
+        UserType = User_type[0]
+        return User(user_id, role=UserType)
+    
+
+#Role required
+def role_required(role):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            roles = role if isinstance(role, list) else [role]
+            print(f"Required roles: {roles}")
+            print(f"User role: {current_user.role}")
+            
+            # Check if user has at least one of the required roles
+            if not any(current_user.has_role(r) for r in roles):
+                return make_response({"msg": "Access forbidden: insufficient role"}, 403)
+            
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
 
 @app.route('/')
 def login():
@@ -72,21 +148,29 @@ def login_form():
     username = request.form.get('Username')
     password = request.form.get('password')
     ID = request.form.get('ID')
+
     user_info = check_credentials(username, password, ID)
-    if user_info:
-        user_id = user_info[0]  # Get the fifth item from the tuple (index starts from 0)
-        user = User(user_id)
+    user_type = check_role(ID)
+    if user_info and user_type:
+        userID = user_info[0]
+        userType = user_type[0]
+        print(f"User role: {userType}")
+
+        user = User(userID, role=userType)  # Initialize User with role
         login_user(user)
-        return redirect(url_for('employee'))
+
+        if userType == "Employee":
+             return redirect(url_for('employee'))
+        elif ( userType == "Manager"):
+            return redirect(url_for('manager'))
+        elif (userType == "FinancialApprover"):
+            return redirect(url_for('purchasingDept'))
+        else:
+            return render_template('purchasingDept.html', info='An error has occured')
+        
     else:
         return render_template('Login.html', info='Invalid User or Password')
-     #   user_id = check_credentials(username, password, ssn)
-  #  if user_id:
-   #     user = User(user_id)
-    #    login_user(user)
-     #   return redirect(url_for('home'))
-  #  else:
-   #     return render_template('login.html', info='Invalid User or Password')
+
 
 # Route to get the current user's ID
 @app.route('/current_user_id')
@@ -97,16 +181,23 @@ def get_current_user_id():
         return "No user logged in"
 
 
+<<<<<<< Updated upstream
 @app.route('/employee')
+=======
+@app.route('/employee', methods=['GET', 'POST'])
+@role_required(['Employee', 'Manager', 'FinancialApprover'])
+>>>>>>> Stashed changes
 @login_required
 def employee():
     return render_template('Employee.html')
 
 @app.route('/manager')
+@role_required('Manager')
 def manager():
     return render_template('Manager.html')
 
 @app.route('/purchasingDept')
+@role_required('FinancialApprover')
 def purchasingDept():
     return render_template('PurchasingDept.html')
 
