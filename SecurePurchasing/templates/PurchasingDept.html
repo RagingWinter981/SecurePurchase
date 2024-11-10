@@ -1,120 +1,116 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Page</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Arial', sans-serif;
-        }
+<style>
+    /* General styles */
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: 'Arial', sans-serif;
+    }
 
-        body {
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: linear-gradient(135deg, #17173c, #acb6e5);
-            position: relative; /* Important for logout button positioning */
-        }
+    body {
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #17173c, #acb6e5);
+        position: relative;
+    }
 
-        /* Style for the Logout Button */
-        .logout-btn {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            padding: 0.5rem 1rem;
-            background-color: #f44336; /* Red color for the logout button */
-            border: none;
-            border-radius: 8px;
-            color: white;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
+    /* Logout Button */
+    .logout-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        padding: 0.5rem 1rem;
+        background-color: #f44336;
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
 
-        .logout-btn:hover {
-            background-color: #e53935; /* Darker red on hover */
-        }
+    .logout-btn:hover {
+        background-color: #e53935;
+    }
 
-        .purchase-container {
-            background-color: #fff;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            width: 600px;
-        }
+    /* Container */
+    .purchase-container {
+        background-color: #fff;
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        width: 80%px;
+    }
 
-        .purchase-container h2 {
-            text-align: center;
-            margin-bottom: 1.5rem;
-            color: #333;
-        }
+    .purchase-container h2 {
+        text-align: center;
+        margin-bottom: 1.5rem;
+        color: #333;
+    }
 
-        .purchase-container form {
-            display: flex;
-            flex-direction: column;
-        }
+    /* Table Styling */
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+    }
 
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
+    th, td {
+        padding: 12px;
+        text-align: left;
+        border: 1px solid #ccc;
+    }
 
-        .form-group label {
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
-            display: block;
-            color: #555;
-        }
+    th {
+        background-color: #17173c;
+        color: #fff;
+        font-weight: bold;
+    }
 
-        .form-group input {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
-        }
+    td {
+        background-color: #f9f9f9;
+        color: #333;
+    }
 
-        .form-group input:focus {
-            border-color: #74ebd5;
-            outline: none;
-        }
+    tr:nth-child(even) td {
+        background-color: #e9ecef;
+    }
 
-        .purchase-container button {
-            padding: 0.75rem;
-            background-color: #17173c;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            color: #fff;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
+    /* Button Styling */
+    button[type="submit"] {
+        padding: 0.5rem 1rem;
+        background-color: #17173c;
+        border: none;
+        border-radius: 8px;
+        color: #fff;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: background-color 0.3s;
+    }
 
-        .purchase-container button:hover {
-            background-color: #17173c;
-        }
+    button[type="submit"]:hover {
+        background-color: #333a73;
+    }
 
-        .purchase-container p {
-            text-align: center;
-            margin-top: 1rem;
-            color: #777;
-            font-size: 0.9rem;
-        }
+    /* Link Styling */
+    .purchase-container p {
+        text-align: center;
+        margin-top: 1rem;
+        color: #777;
+        font-size: 0.9rem;
+    }
 
-        .purchase-container p a {
-            color: #17173c;
-            text-decoration: none;
-        }
+    .purchase-container p a {
+        color: #17173c;
+        text-decoration: none;
+    }
 
-        .purchase-container p a:hover {
-            text-decoration: underline;
-        }
-    </style>
+    .purchase-container p a:hover {
+        text-decoration: underline;
+    }
+</style>
 </head>
 <body>
     <!-- Log Out Button -->
@@ -122,24 +118,46 @@
 
     <div class="purchase-container">
         <h2>Purchase Approval</h2>
-        <form>
-            <div class="form-group">
-                <label for="Employee">Employee</label>
-                <input type="text" id="Employee" placeholder="Name" required>
-            </div>
-            <div class="form-group">
-                <label for="Item">Item</label>
-                <output type="text" id="item" placeholder="Item" required></output>
-            </div>
-            <div class="form-group">
-                <label for="Quantity">Quantity</label>
-                <input type="number" id="Quantity" placeholder="Amount" required>
-            </div>
-            <div class="form-group">
-                <label for="Price">Price</label>
-                <input type="text" id="Price" placeholder="$00.00" required>
-            </div>
-            <button type="submit">Submit Approval</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Item</th>
+                    <th>Price</th>
+                    <th>Quantity</th>
+                    <th>Time Requested</th>
+                    <th>Manager Name</th>
+                    <th>Manager Approval</th>
+                    <th>Time Approved</th>
+                    <th>Request ID</th>
+                    <th>Approve</th>
+                    <th>Deny</th>
+                    <!-- <th>Approval</th> -->
+                </tr>
+            </thead>
+            <tbody>
+                {% for employee, item, price, quantity, time, ManagerName, ManagerApproval, timeApproved, ID in FinAppInfo %}
+                <tr>
+                    <td>{{ employee }}</td>
+                    <td>{{ item }}</td>
+                    <td>{{ price }}</td>
+                    <td>{{ quantity }}</td>
+                    <td>{{ time }}</td>
+                    <td>{{ ManagerName }}</td>
+                    <td>{{ ManagerApproval }}</td>
+                    <td>{{ timeApproved }}</td>
+                    <td>{{ ID }}</td>
+                    <td>
+                        <button type="submit">Approve</button>
+
+                    </td>
+                    <td>            
+                        <button type="submit">Deny</button>
+                    </td>
+                 </tr>
+                 {% endfor %}
+             </tbody>
+         </table>
             <p>Need to make a request? <a href="{{ url_for('employee') }}">Request Here</a></p>
         </form>
     </div>

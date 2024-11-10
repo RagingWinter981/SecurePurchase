@@ -290,7 +290,7 @@ def manager():
     return render_template('Manager.html', ManagerInfo=decrypted_manager_info)
 
 
-@app.route('/approve_item/<int:id>', methods=['POST'])
+@app.route('/approve_item/<string:id>', methods=['POST'])
 @login_required
 @role_required('Manager')
 def approve_item(id):
@@ -342,7 +342,36 @@ def deny_item(id):
 @app.route('/purchasingDept')
 @role_required('FinancialApprover')
 def purchasingDept():
-    return render_template('PurchasingDept.html')
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, managerName, managerApprove, managerTimeStamp, RequestID FROM Request")
+    cursor.execute(RetrieveQuery, ())
+    FinAppInfo = cursor.fetchall()
+    conn.close()
+
+    encrypted_columns = [1, 2, 3, 4, 5, 6, 7, 8]
+
+    # Decrypt specific columns in the retrieved data
+    decrypted_FinApp_info = []
+    for row in FinAppInfo:
+        decrypted_row = list(row)  # Convert tuple to list for modification
+        
+        # Only decrypt specified columns
+        for col_index in encrypted_columns:
+            if col_index < len(row):
+                try:
+                    # Convert hex string to bytes and decrypt
+                    encrypted_bytes = binascii.unhexlify(str(row[col_index]))
+                    decrypted_value = decrypt_data(encrypted_bytes)
+                    decrypted_row[col_index] = decrypted_value
+                except (binascii.Error, Exception) as e:
+                    print(f"Decryption error for column {col_index}: {e}")
+                    # Keep original value if decryption fails
+                    continue
+
+        decrypted_FinApp_info.append(tuple(decrypted_row))
+
+    return render_template('PurchasingDept.html', FinAppInfo=decrypted_FinApp_info)
 
 @app.route('/logout')
 @login_required
