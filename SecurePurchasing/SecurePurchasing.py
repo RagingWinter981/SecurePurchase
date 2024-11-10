@@ -23,26 +23,26 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-# SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-# connection_string = f"""
-#   DRIVER={{{DRIVER_NAME}}};
-#   SERVER={SERVER_NAME};
-#   DATABASE={DATABASE_NAME};
-#   Trust_Connection=yes;
-#    uid=Kylee;
-#   pwd=1234;
-# """
+SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+connection_string = f"""
+  DRIVER={{{DRIVER_NAME}}};
+  SERVER={SERVER_NAME};
+  DATABASE={DATABASE_NAME};
+  Trust_Connection=yes;
+   uid=Kylee;
+  pwd=1234;
+"""
 
 # Albert Connection String
-SERVER_NAME = 'ARIESPC'
-connection_string = f"""
-    DRIVER={{{DRIVER_NAME}}};
-    SERVER={SERVER_NAME};
-    DATABASE={DATABASE_NAME};
-    Trust_Connection=yes;
-     uid=Aeris;
-    pwd=1234;
-"""
+# SERVER_NAME = 'ARIESPC'
+# connection_string = f"""
+#     DRIVER={{{DRIVER_NAME}}};
+#     SERVER={SERVER_NAME};
+#     DATABASE={DATABASE_NAME};
+#     Trust_Connection=yes;
+#      uid=Aeris;
+#     pwd=1234;
+# """
 
 # JJ's Connection String
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
@@ -230,8 +230,8 @@ def employee():
                 input_employeeTimeRequest = binascii.hexlify(encrypt_employeeTimeRequest).decode()
 
                 query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName) VALUES (?, ?, ?, ?, ?, ?, ?)")
-
                 cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
+                
 
                 # Decrypt to verify
                 decrypted_item = decrypt_data(binascii.unhexlify(input_item))
@@ -241,6 +241,8 @@ def employee():
                 decrypted_employeeTimeRequest = decrypt_data(binascii.unhexlify(input_employeeTimeRequest))
 
                 print("Decrypted Item:", decrypted_item, "Decrypt Price: ", decrypted_price, "Decrypt Quantity: ", decrypted_quantity, "Decrypt, Request ID: ", decrypted_requestID, "Time Requested: ", decrypted_employeeTimeRequest)
+
+                print(f"Executing query: {query1} with parameters: {(employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager)}")
 
                 conn.commit()
                 
@@ -253,8 +255,40 @@ def employee():
 
 @app.route('/manager')
 @role_required('Manager')
+@login_required
 def manager():
-    return render_template('Manager.html')
+
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest,RequestID FROM Request")
+    cursor.execute(RetrieveQuery, ())
+    ManagerInfo = cursor.fetchall()
+    conn.close()
+
+    return render_template('Manager.html', ManagerInfo=ManagerInfo )
+
+@app.route('/edit/<int:id>')
+@login_required
+@role_required('Manager')
+def approve_item(id):
+
+    managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+    cursor.execute(employee_query, (current_user.id,))
+    rows = cursor.fetchall()
+    managerName = rows[0]
+
+
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    query = f"UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Approved' WHERE RequestID = ?"
+    cursor.execute(query, (managerName,managerTimeRequest , id ))
+    conn.close()
+    
+    return f'Approving item {id}'
 
 @app.route('/purchasingDept')
 @role_required('FinancialApprover')

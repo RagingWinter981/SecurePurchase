@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Page</title>
+    <title>Purchase Approval</title>
     <style>
         * {
             margin: 0;
@@ -18,16 +18,15 @@
             justify-content: center;
             align-items: center;
             background: linear-gradient(135deg, #17173c, #acb6e5);
-            position: relative; /* Important for logout button positioning */
+            position: relative;
         }
 
-        /* Style for the Logout Button */
         .logout-btn {
             position: absolute;
             top: 20px;
             right: 20px;
             padding: 0.5rem 1rem;
-            background-color: #f44336; /* Red color for the logout button */
+            background-color: #f44336;
             border: none;
             border-radius: 8px;
             color: white;
@@ -37,7 +36,7 @@
         }
 
         .logout-btn:hover {
-            background-color: #e53935; /* Darker red on hover */
+            background-color: #e53935;
         }
 
         .purchase-container {
@@ -45,7 +44,7 @@
             padding: 2rem;
             border-radius: 12px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            width: 350px;
+            width: 60%;
         }
 
         .purchase-container h2 {
@@ -70,18 +69,43 @@
             color: #555;
         }
 
-        .form-group input {
+        /* Modern Table Styling */
+        table {
             width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s;
+            border-collapse: collapse;
+            margin-top: 0.75rem;
         }
 
-        .form-group input:focus {
-            border-color: #74ebd5;
-            outline: none;
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            font-size: 0.9rem;
+            color: #333;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        td {
+            border-bottom: 1px solid #ddd;
+        }
+
+        /* Ensure the table is vertical */
+        .purchase-container table {
+            display: block;
+            width: auto;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        /* Adjust column headers */
+        th {
+            width: 200px;
         }
 
         .purchase-container button {
@@ -124,22 +148,38 @@
         <h2>Purchase Approval</h2>
         <form>
             <div class="form-group">
-                <label for="Employee">Employee</label>
-                <input type="text" id="Employee" placeholder="Name" required>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Item</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Request ID</th>
+                            <th>Time Requested</th>
+                            <th>Approval</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for employee, item, price, quantity, time, ID in ManagerInfo %}
+                        <tr>
+                            <td>{{ employee }}</td>
+                            <td>{{ item }}</td>
+                            <td>{{ price }}</td>
+                            <td>{{ quantity }}</td>
+                            <td>{{ time }}</td>
+                            <td>{{ ID }}</td>
+                            <td>
+                               <form method="POST" action="/Approve/{{ ID }}">
+                                    <button type="submit">Approve</button>
+                                </form>
+                            <td><button type="submit">Deny</button></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-            <div class="form-group">
-                <label for="Item">Item</label>
-                <output type="text" id="item" placeholder="Item" required></output>
-            </div>
-            <div class="form-group">
-                <label for="Quantity">Quantity</label>
-                <input type="number" id="Quantity" placeholder="Amount" required>
-            </div>
-            <div class="form-group">
-                <label for="Price">Price</label>
-                <input type="text" id="Price" placeholder="$00.00" required>
-            </div>
-            <button type="submit">Submit Approval</button>
+
             <p>Need to make a request? <a href="{{ url_for('employee') }}">Request Here</a></p>
         </form>
     </div>
