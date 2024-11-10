@@ -123,19 +123,32 @@
 
     <div class="Approval-container">
         <h2>Approval Request</h2>
-        <form>
+        <form method="POST">
             <div class="form-group">
                 <label for="Item">Item</label>
-                <input type="text" id="item" name = "item" placeholder="Enter your item" required>
+                <input type="text" id="Item" name = "Item" placeholder="Enter your item" required>
             </div>
             <div class="form-group">
                 <label for="Quantity">Quantity</label>
-                <input type="number" id="Quantity" name = "quanity" placeholder="Amount" required>
+                <input type="number" id="Quantity" name = "Quantity" placeholder="Amount" required>
             </div>
             <div class="form-group">
                 <label for="Price">Price</label>
-                <input type="text" id="Price" name = "Price" placeholder="$00.00" required>
+                <input type="text" id="Price" name = "Price" placeholder="$00.00" required
+                pattern="^\d+(\.\d{2})?$" 
+                title="Enter a price with two decimal places, e.g., 10.99" 
+                oninput="formatPrice(this)">
             </div>
+
+            <!-- JavaScript make sure that user enters dollar format-->
+            <script>
+                function formatPrice(input) {
+                    const value = input.value;
+                    // Allow only numbers and one dot
+                    input.value = value.replace(/[^0-9.]/g, '').replace(/(\.\d{2}).+$/, '$1');
+                }
+                </script>
+
             <button type="submit">Submit Request</button>
         </form>
     </div>

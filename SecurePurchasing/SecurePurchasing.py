@@ -193,12 +193,13 @@ def get_current_user_id():
 @login_required
 def employee():
     if request.method == 'POST':
-        item = request.form.get('item')
+        item = request.form.get('Item')
         price = request.form.get('Price')
         quantity = request.form.get('Quantity')
         requestID = random.randint(1000, 9999)
         employeeTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        print(f"Print Quantity", quantity, "Print Price", price)
         try:
             with odbc.connect(connection_string) as conn:
                 cursor = conn.cursor()
@@ -213,8 +214,6 @@ def employee():
                 # Extract the employee name and manager name from the row tuple
                 employee = row[0]
                 manager = row[1]
-
-                print (row[0], row[1])
 
                 # Encrypts each value using AES-128
                 encrypt_item = encrypt_data(item)
@@ -235,13 +234,13 @@ def employee():
                 cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
 
                 # Decrypt to verify
-                #decrypted_item = decrypt_data(binascii.unhexlify(input_item))
-                #decrypted_price = decrypt_data(binascii.unhexlify(input_price))
-                #decrypted_quantity = decrypt_data(binascii.unhexlify(input_quantity))
-                #decrypted_requestID = decrypt_data(binascii.unhexlify(input_requestID))
-                #decrypted_employeeTimeRequest = decrypt_data(binascii.unhexlify(input_employeeTimeRequest))
+                decrypted_item = decrypt_data(binascii.unhexlify(input_item))
+                decrypted_price = decrypt_data(binascii.unhexlify(input_price))
+                decrypted_quantity = decrypt_data(binascii.unhexlify(input_quantity))
+                decrypted_requestID = decrypt_data(binascii.unhexlify(input_requestID))
+                decrypted_employeeTimeRequest = decrypt_data(binascii.unhexlify(input_employeeTimeRequest))
 
-                #print("Decrypted Item:", decrypted_item, "Decrypt Price: ", decrypted_price, "Decrypt Quantity: ", decrypted_quantity, "Decrypt, Request ID: ", decrypted_requestID, "Time Requested: ", decrypted_employeeTimeRequest)
+                print("Decrypted Item:", decrypted_item, "Decrypt Price: ", decrypted_price, "Decrypt Quantity: ", decrypted_quantity, "Decrypt, Request ID: ", decrypted_requestID, "Time Requested: ", decrypted_employeeTimeRequest)
 
                 conn.commit()
                 
