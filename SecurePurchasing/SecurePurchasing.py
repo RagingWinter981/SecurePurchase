@@ -267,28 +267,54 @@ def manager():
 
     return render_template('Manager.html', ManagerInfo=ManagerInfo )
 
-@app.route('/edit/<int:id>')
+@app.route('/approve_item/<int:id>', methods=['POST'])
 @login_required
 @role_required('Manager')
 def approve_item(id):
+    if request.method == 'POST':
+        managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    conn = connect_to_database()
-    cursor = conn.cursor()
-    employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
-    cursor.execute(employee_query, (current_user.id,))
-    rows = cursor.fetchall()
-    managerName = rows[0]
+        conn = connect_to_database()
+        cursor = conn.cursor()
+        employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+        cursor.execute(employee_query, (current_user.id,))
+        rows = cursor.fetchone()
+        managerName = rows[0]
 
 
-    conn = connect_to_database()
-    cursor = conn.cursor()
-    query = f"UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Approved' WHERE RequestID = ?"
-    cursor.execute(query, (managerName,managerTimeRequest , id ))
-    conn.close()
+        conn = connect_to_database()
+        cursor = conn.cursor()
+        query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Approved' WHERE RequestID = ?"
+        cursor.execute(query, (managerName,managerTimeRequest , id ))
+        conn.commit()
+        conn.close()
     
-    return f'Approving item {id}'
+    return redirect('/manager')
+
+@app.route('/deny_item/<int:id>', methods=['POST'])
+@login_required
+@role_required('Manager')
+def deny_item(id):
+    if request.method == 'POST':
+        managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        conn = connect_to_database()
+        cursor = conn.cursor()
+        employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+        cursor.execute(employee_query, (current_user.id,))
+        rows = cursor.fetchone()
+        managerName = rows[0]
+
+
+        conn = connect_to_database()
+        cursor = conn.cursor()
+        query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Deny' WHERE RequestID = ?"
+        cursor.execute(query, (managerName,managerTimeRequest , id ))
+        conn.commit()
+        conn.close()
+    
+    return redirect('/manager')
+
 
 @app.route('/purchasingDept')
 @role_required('FinancialApprover')
