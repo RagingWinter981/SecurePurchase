@@ -23,26 +23,26 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-connection_string = f"""
-  DRIVER={{{DRIVER_NAME}}};
-  SERVER={SERVER_NAME};
-  DATABASE={DATABASE_NAME};
-  Trust_Connection=yes;
-   uid=Kylee;
-  pwd=1234;
-"""
+# SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+# connection_string = f"""
+#   DRIVER={{{DRIVER_NAME}}};
+#   SERVER={SERVER_NAME};
+#   DATABASE={DATABASE_NAME};
+#   Trust_Connection=yes;
+#    uid=Kylee;
+#   pwd=1234;
+# """
 
 # Albert Connection String
-# SERVER_NAME = 'ARIESPC'
-# connection_string = f"""
-#     DRIVER={{{DRIVER_NAME}}};
-#     SERVER={SERVER_NAME};
-#     DATABASE={DATABASE_NAME};
-#     Trust_Connection=yes;
-#      uid=Aeris;
-#     pwd=1234;
-# """
+SERVER_NAME = 'ARIESPC'
+connection_string = f"""
+    DRIVER={{{DRIVER_NAME}}};
+    SERVER={SERVER_NAME};
+    DATABASE={DATABASE_NAME};
+    Trust_Connection=yes;
+     uid=Aeris;
+    pwd=1234;
+"""
 
 # JJ's Connection String
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
@@ -260,60 +260,106 @@ def manager():
 
     conn = connect_to_database()
     cursor = conn.cursor()
-    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest,RequestID FROM Request")
+    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest FROM Request")
     cursor.execute(RetrieveQuery, ())
     ManagerInfo = cursor.fetchall()
     conn.close()
 
-    return render_template('Manager.html', ManagerInfo=ManagerInfo )
+    encrypted_columns = [1, 2, 3, 4, 5]
 
-@app.route('/approve_item/<int:id>', methods=['POST'])
+    # Decrypt specific columns in the retrieved data
+    decrypted_manager_info = []
+    for row in ManagerInfo:
+        decrypted_row = list(row)  # Convert tuple to list for modification
+        
+        # Only decrypt specified columns
+        for col_index in encrypted_columns:
+            if col_index < len(row):
+                try:
+                    # Convert hex string to bytes and decrypt
+                    encrypted_bytes = binascii.unhexlify(str(row[col_index]))
+                    decrypted_value = decrypt_data(encrypted_bytes)
+                    decrypted_row[col_index] = decrypted_value
+                except (binascii.Error, Exception) as e:
+                    print(f"Decryption error for column {col_index}: {e}")
+                    # Keep original value if decryption fails
+                    continue
+
+        decrypted_manager_info.append(tuple(decrypted_row))
+
+    return render_template('Manager.html', ManagerInfo=decrypted_manager_info)
+
+@app.route('/edit/<int:id>')
 @login_required
 @role_required('Manager')
 def approve_item(id):
-    if request.method == 'POST':
-        managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        conn = connect_to_database()
-        cursor = conn.cursor()
-        employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
-        cursor.execute(employee_query, (current_user.id,))
-        rows = cursor.fetchone()
-        managerName = rows[0]
+    managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+    cursor.execute(employee_query, (current_user.id,))
+    rows = cursor.fetchall()
+    managerName = rows[0]
 
 
-        conn = connect_to_database()
-        cursor = conn.cursor()
-        query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Approved' WHERE RequestID = ?"
-        cursor.execute(query, (managerName,managerTimeRequest , id ))
-        conn.commit()
-        conn.close()
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    query = f"UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Approved' WHERE RequestID = ?"
+    cursor.execute(query, (managerName,managerTimeRequest , id ))
+    conn.close()
     
-    return redirect('/manager')
-
-@app.route('/deny_item/<int:id>', methods=['POST'])
-@login_required
-@role_required('Manager')
-def deny_item(id):
-    if request.method == 'POST':
-        managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        conn = connect_to_database()
-        cursor = conn.cursor()
-        employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
-        cursor.execute(employee_query, (current_user.id,))
-        rows = cursor.fetchone()
-        managerName = rows[0]
+    return f'Approving item {id}'
 
 
-        conn = connect_to_database()
-        cursor = conn.cursor()
-        query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Deny' WHERE RequestID = ?"
-        cursor.execute(query, (managerName,managerTimeRequest , id ))
-        conn.commit()
-        conn.close()
+# @app.route('/approve_item/<int:id>', methods=['POST'])
+# @login_required
+# @role_required('Manager')
+# def approve_item(id):
+#     if request.method == 'POST':
+#         managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+#         # conn = connect_to_database()
+#         # cursor = conn.cursor()
+#         # employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+#         # cursor.execute(employee_query, (current_user.id,))
+#         # rows = cursor.fetchone()
+#         # managerName = rows[0]
+
+
+#         # conn = connect_to_database()
+#         # cursor = conn.cursor()
+#         # query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Approved' WHERE RequestID = ?"
+#         # cursor.execute(query, (managerName,managerTimeRequest , id ))
+#         # conn.commit()
+#         # conn.close()
     
-    return redirect('/manager')
+#     return redirect('/manager')
+
+# @app.route('/deny_item/<int:id>', methods=['POST'])
+# @login_required
+# @role_required('Manager')
+# def deny_item(id):
+#     if request.method == 'POST':
+#         managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+#         # conn = connect_to_database()
+#         # cursor = conn.cursor()
+#         # employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+#         # cursor.execute(employee_query, (current_user.id,))
+#         # rows = cursor.fetchone()
+#         # managerName = rows[0]
+
+
+#         # conn = connect_to_database()
+#         # cursor = conn.cursor()
+#         # query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Deny' WHERE RequestID = ?"
+#         # cursor.execute(query, (managerName,managerTimeRequest , id ))
+#         # conn.commit()
+#         # conn.close()
+    
+#     return redirect('/manager')
 
 
 @app.route('/purchasingDept')

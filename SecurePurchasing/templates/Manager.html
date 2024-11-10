@@ -157,7 +157,7 @@
                             <th>Quantity</th>
                             <th>Request ID</th>
                             <th>Time Requested</th>
-                            <th>Approval</th>
+                            <!-- <th>Approval</th> -->
                         </tr>
                     </thead>
                     <tbody>
@@ -170,20 +170,16 @@
                             <td>{{ time }}</td>
                             <td>{{ ID }}</td>
                             <td>
-                                <form action="{{ url_for('approve_item', id=ID) }}" method="POST">
-                                    <button type="submit">Approve</button>
-                                </form>
-                            </td>
-                            <td>  
-                                <form action="{{ url_for('deny_item', id=ID) }}" method="POST">
-                                    <button type="submit">Deny</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                                <form method="POST" action="/Approve/{{ ID }}">
+                                     <button type="submit">Approve</button>
+                                 </form>
+                             <td><button type="submit">Deny</button></td>
+                         </tr>
+                         {% endfor %}
+                     </tbody>
+                 </table>
+             </div>
+             <button type="submit">Submit Approval</button>
 
             <p>Need to make a request? <a href="{{ url_for('employee') }}">Request Here</a></p>
         </form>
