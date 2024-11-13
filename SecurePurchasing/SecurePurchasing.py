@@ -23,26 +23,26 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-connection_string = f"""
-  DRIVER={{{DRIVER_NAME}}};
-  SERVER={SERVER_NAME};
-  DATABASE={DATABASE_NAME};
-  Trust_Connection=yes;
-   uid=Kylee;
-  pwd=1234;
-"""
+#SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+# connection_string = f"""
+#   DRIVER={{{DRIVER_NAME}}};
+#   SERVER={SERVER_NAME};
+#   DATABASE={DATABASE_NAME};
+#   Trust_Connection=yes;
+#    uid=Kylee;
+#   pwd=1234;
+# """
 
 # # Albert Connection String
-# SERVER_NAME = 'ARIESPC'
-# connection_string = f"""
-#     DRIVER={{{DRIVER_NAME}}};
-#     SERVER={SERVER_NAME};
-#     DATABASE={DATABASE_NAME};
-#     Trust_Connection=yes;
-#      uid=Aeris;
-#     pwd=1234;
-# """
+SERVER_NAME = 'ARIESPC'
+connection_string = f"""
+    DRIVER={{{DRIVER_NAME}}};
+    SERVER={SERVER_NAME};
+    DATABASE={DATABASE_NAME};
+    Trust_Connection=yes;
+     uid=Aeris;
+    pwd=1234;
+"""
 
 # JJ's Connection String
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
@@ -120,10 +120,13 @@ login_manager.login_view = "login"
 
 @login_manager.user_loader
 def load_user(user_id):
-    User_type = check_role(user_id)
+    Enc_type = check_role(user_id)
+
+    # Decrypte User_type
+    User_type = decrypt_data(binascii.unhexlify(Enc_type[0]))
 
     if User_type:
-        UserType = User_type[0]
+        UserType = User_type
         return User(user_id, role=UserType)
     
 
@@ -156,15 +159,29 @@ def login_form():
     password = request.form.get('password')
     ID = request.form.get('ID')
 
-    user_info = check_credentials(username, password, ID)
-    user_type = check_role(ID)
+    encrypted_username = encrypt_data(str(username))
+    encrypted_password = encrypt_data(str(password))
+    encrypted_ID = encrypt_data(str(ID))
+
+    # convert to hex using hexify and decode
+    hex_username = binascii.hexlify(encrypted_username).decode()
+    hex_password = binascii.hexlify(encrypted_password).decode()
+    hex_ID = binascii.hexlify(encrypted_ID).decode()
+
+    user_info = check_credentials(hex_username, hex_password, hex_ID)
+    user_type = check_role(hex_ID)
+
     if user_info and user_type:
         userID = user_info[0]
-        userType = user_type[0]
-        print(f"User role: {userType}")
+        encrypted_userType = user_type[0]
 
-        user = User(userID, role=userType)  # Initialize User with role
+        userType = decrypt_data(binascii.unhexlify(encrypted_userType))
+        print("UserType: ", userType)
+
+        user = User(userID, role=userType)  
         login_user(user)
+
+        print("Test again: ", userType)
 
         if userType == "Employee":
              return redirect(url_for('employee'))
@@ -177,7 +194,6 @@ def login_form():
         
     else:
         return render_template('Login.html', info='Invalid User or Password')
-
 
 # Route to get the current user's ID
 @app.route('/current_user_id')
@@ -265,7 +281,7 @@ def manager():
     ManagerInfo = cursor.fetchall()
     conn.close()
 
-    encrypted_columns = [1, 2, 3, 4, 5]
+    encrypted_columns = [0, 1, 2, 3, 4, 5]
 
     # Decrypt specific columns in the retrieved data
     decrypted_manager_info = []
@@ -275,15 +291,10 @@ def manager():
         # Only decrypt specified columns
         for col_index in encrypted_columns:
             if col_index < len(row):
-                try:
-                    # Convert hex string to bytes and decrypt
-                    encrypted_bytes = binascii.unhexlify(str(row[col_index]))
-                    decrypted_value = decrypt_data(encrypted_bytes)
-                    decrypted_row[col_index] = decrypted_value
-                except (binascii.Error, Exception) as e:
-                    print(f"Decryption error for column {col_index}: {e}")
-                    # Keep original value if decryption fails
-                    continue
+                # Convert hex string to bytes and decrypt
+                encrypted_bytes = binascii.unhexlify(str(row[col_index]))
+                decrypted_value = decrypt_data(encrypted_bytes)
+                decrypted_row[col_index] = decrypted_value
 
         decrypted_manager_info.append(tuple(decrypted_row))
 
