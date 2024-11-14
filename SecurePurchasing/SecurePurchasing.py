@@ -122,7 +122,7 @@ login_manager.login_view = "login"
 def load_user(user_id):
     Enc_type = check_role(user_id)
 
-    # Decrypte User_type
+    # Decrypt User_type
     User_type = decrypt_data(binascii.unhexlify(Enc_type[0]))
 
     if User_type:
@@ -315,6 +315,7 @@ def approve_item(id):
         rows = cursor.fetchone()
         managerName = rows[0]
 
+        
 
         conn = connect_to_database()
         cursor = conn.cursor()
@@ -360,7 +361,7 @@ def purchasingDept():
     FinAppInfo = cursor.fetchall()
     conn.close()
 
-    encrypted_columns = [1, 2, 3, 4, 5, 6, 7, 8]
+    encrypted_columns = [0, 1, 2, 3, 4, 5, 6, 7, 8]
 
     # Decrypt specific columns in the retrieved data
     decrypted_FinApp_info = []
@@ -376,8 +377,7 @@ def purchasingDept():
                     decrypted_value = decrypt_data(encrypted_bytes)
                     decrypted_row[col_index] = decrypted_value
                 except (binascii.Error, Exception) as e:
-                    print(f"Decryption error for column {col_index}: {e}")
-                    # Keep original value if decryption fails
+                    # Keep original value
                     continue
 
         decrypted_FinApp_info.append(tuple(decrypted_row))
