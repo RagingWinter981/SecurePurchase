@@ -10,10 +10,12 @@
     body {
         height: 100vh;
         display: flex;
+        flex-direction: column; /* Stack items vertically */
         justify-content: center;
         align-items: center;
         background: linear-gradient(135deg, #17173c, #acb6e5);
         position: relative;
+        gap: 20px; /* Add space between the containers if desired */
     }
 
     /* Logout Button */
@@ -148,18 +150,56 @@
                     <td>{{ timeApproved }}</td>
                     <td>{{ ID }}</td>
                     <td>
-                        <button type="submit">Approve</button>
-
+                        <form action="{{ url_for('purchase_item', id=ID) }}" method="POST">
+                            <button type="submit">Approve</button>
+                        </form>
                     </td>
                     <td>            
-                        <button type="submit">Deny</button>
+                        <form action="{{ url_for('decline_item', id=ID) }}" method="POST">
+                            <button type="submit">Deny</button>
+                        </form>
                     </td>
                  </tr>
                  {% endfor %}
              </tbody>
+        </table>
+    </div>
+    
+    <div class="purchase-container">
+        <h2>History</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Item</th>
+                    <th>Price</th>
+                    <th>Quantity</th>
+                    <th>Time Requested</th>
+                    <th>Manager Name</th>
+                    <th>Manager Approval</th>
+                    <th>Time Approved</th>
+                    <th>Request ID</th>
+                    <th>Is Purchased?</th>
+                    <!-- <th>Approval</th> -->
+                </tr>
+            </thead>
+             <tbody>
+                {% for employee, item, price, quantity, time, ManagerName, ManagerApproval, timeApproved, ID, isPurchased in FinAppFinal %}
+                <tr>
+                    <td>{{ employee }}</td>
+                    <td>{{ item }}</td>
+                    <td>{{ price }}</td>
+                    <td>{{ quantity }}</td>
+                    <td>{{ time }}</td>
+                    <td>{{ ManagerName }}</td>
+                    <td>{{ ManagerApproval }}</td>
+                    <td>{{ timeApproved }}</td>
+                    <td>{{ ID }}</td>
+                    <td>{{ isPurchased}} </td>
+                 </tr>
+                 {% endfor %}
+             </tbody>
          </table>
-            <p>Need to make a request? <a href="{{ url_for('employee') }}">Request Here</a></p>
-        </form>
     </div>
 
 </body>

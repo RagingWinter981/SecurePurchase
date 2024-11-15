@@ -23,26 +23,26 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-#SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-# connection_string = f"""
-#   DRIVER={{{DRIVER_NAME}}};
-#   SERVER={SERVER_NAME};
-#   DATABASE={DATABASE_NAME};
-#   Trust_Connection=yes;
-#    uid=Kylee;
-#   pwd=1234;
-# """
+SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+connection_string = f"""
+  DRIVER={{{DRIVER_NAME}}};
+  SERVER={SERVER_NAME};
+  DATABASE={DATABASE_NAME};
+  Trust_Connection=yes;
+   uid=Kylee;
+  pwd=1234;
+"""
 
 # # Albert Connection String
-SERVER_NAME = 'ARIESPC'
-connection_string = f"""
-    DRIVER={{{DRIVER_NAME}}};
-    SERVER={SERVER_NAME};
-    DATABASE={DATABASE_NAME};
-    Trust_Connection=yes;
-     uid=Aeris;
-    pwd=1234;
-"""
+# SERVER_NAME = 'ARIESPC'
+# connection_string = f"""
+#     DRIVER={{{DRIVER_NAME}}};
+#     SERVER={SERVER_NAME};
+#     DATABASE={DATABASE_NAME};
+#     Trust_Connection=yes;
+#      uid=Aeris;
+#     pwd=1234;
+# """
 
 # JJ's Connection String
 #SERVER_NAME = 'LAPTOP-JP2PAISQ'
@@ -276,7 +276,7 @@ def manager():
 
     conn = connect_to_database()
     cursor = conn.cursor()
-    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, RequestID FROM Request")
+    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, RequestID FROM Request WHERE managerApprove IS NULL")
     cursor.execute(RetrieveQuery, ())
     ManagerInfo = cursor.fetchall()
     conn.close()
@@ -308,6 +308,11 @@ def approve_item(id):
     if request.method == 'POST':
         managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        encrypt_ID = encrypt_data(id)
+        hex_ID = binascii.hexlify(encrypt_ID).decode()
+        encrypt_managerTimeRequest = encrypt_data(str(managerTimeRequest))
+        hex_managerTimeRequest = binascii.hexlify(encrypt_managerTimeRequest).decode()
+
         conn = connect_to_database()
         cursor = conn.cursor()
         employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
@@ -315,24 +320,35 @@ def approve_item(id):
         rows = cursor.fetchone()
         managerName = rows[0]
 
-        
+        encrypt_managerName = encrypt_data(managerName)
+        hex_managerName = binascii.hexlify(encrypt_managerName).decode()
+        print(current_user.id)
+        print(managerName)
+
+        encrypt_Approve = encrypt_data("Approved")
+        hex_approve = binascii.hexlify(encrypt_Approve).decode()        
 
         conn = connect_to_database()
         cursor = conn.cursor()
-        query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Approved' WHERE RequestID = ?"
-        cursor.execute(query, (managerName,managerTimeRequest , id ))
+        query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ? WHERE RequestID = ?"
+        cursor.execute(query, (hex_managerTimeRequest, hex_approve , hex_ID))
         conn.commit()
         conn.close()
     
     return redirect('/manager')
 
-@app.route('/deny_item/<int:id>', methods=['POST'])
+@app.route('/deny_item/<string:id>', methods=['POST'])
 @login_required
 @role_required('Manager')
 def deny_item(id):
     if request.method == 'POST':
         managerTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
+        encrypt_ID = encrypt_data(id)
+        hex_ID = binascii.hexlify(encrypt_ID).decode()
+        encrypt_managerTimeRequest = encrypt_data(str(managerTimeRequest))
+        hex_managerTimeRequest = binascii.hexlify(encrypt_managerTimeRequest).decode()
+
         conn = connect_to_database()
         cursor = conn.cursor()
         employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
@@ -340,11 +356,18 @@ def deny_item(id):
         rows = cursor.fetchone()
         managerName = rows[0]
 
+        encrypt_managerName = encrypt_data(managerName)
+        hex_managerName = binascii.hexlify(encrypt_managerName).decode()
+        print(current_user.id)
+        print(managerName)
+
+        encrypt_Deny = encrypt_data("Deny")
+        hex_Deny = binascii.hexlify(encrypt_Deny).decode() 
 
         conn = connect_to_database()
         cursor = conn.cursor()
-        query = "UPDATE Request SET managerName = ?, managerTimeStamp = ?, managerApprove = 'Deny' WHERE RequestID = ?"
-        cursor.execute(query, (managerName,managerTimeRequest , id ))
+        query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ? WHERE RequestID = ?"
+        cursor.execute(query, (hex_managerTimeRequest, hex_Deny , hex_ID))
         conn.commit()
         conn.close()
     
@@ -356,7 +379,7 @@ def deny_item(id):
 def purchasingDept():
     conn = connect_to_database()
     cursor = conn.cursor()
-    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, managerName, managerApprove, managerTimeStamp, RequestID FROM Request")
+    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, managerName, managerApprove, managerTimeStamp, RequestID FROM Request Where IsPurchased IS NULL AND managerApprove IS NOT NULL")
     cursor.execute(RetrieveQuery, ())
     FinAppInfo = cursor.fetchall()
     conn.close()
@@ -382,7 +405,78 @@ def purchasingDept():
 
         decrypted_FinApp_info.append(tuple(decrypted_row))
 
-    return render_template('PurchasingDept.html', FinAppInfo=decrypted_FinApp_info)
+
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    RetrieveResultsQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, managerName, managerApprove, managerTimeStamp, RequestID, IsPurchased FROM Request Where IsPurchased IS NOT NULL")
+    cursor.execute(RetrieveResultsQuery, ())
+    FinAppResult = cursor.fetchall()
+    conn.close()
+
+    encrypted_columns = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+    # Decrypt specific columns in the retrieved data
+    decrypted_FinApp_Result= []
+    for row in FinAppResult:
+        decrypted_row = list(row)  # Convert tuple to list for modification
+        
+        # Only decrypt specified columns
+        for col_index in encrypted_columns:
+            if col_index < len(row):
+                try:
+                    # Convert hex string to bytes and decrypt
+                    encrypted_bytes = binascii.unhexlify(str(row[col_index]))
+                    decrypted_value = decrypt_data(encrypted_bytes)
+                    decrypted_row[col_index] = decrypted_value
+                except (binascii.Error, Exception) as e:
+                    # Keep original value
+                    continue
+
+        decrypted_FinApp_Result.append(tuple(decrypted_row))
+
+    return render_template('PurchasingDept.html', FinAppInfo=decrypted_FinApp_info, FinAppFinal=decrypted_FinApp_Result)
+
+@app.route('/Purchase_item/<string:id>', methods=['POST'])
+@login_required
+@role_required('FinancialApprover')
+def purchase_item(id):
+    if request.method == 'POST':
+
+        encrypt_ID = encrypt_data(id)
+        hex_ID = binascii.hexlify(encrypt_ID).decode()
+
+        encrypt_Approve = encrypt_data("Purchased")
+        hex_approve = binascii.hexlify(encrypt_Approve).decode()        
+
+        conn = connect_to_database()
+        cursor = conn.cursor()
+        query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
+        cursor.execute(query, (hex_approve , hex_ID))
+        conn.commit()
+        conn.close()
+    
+    return redirect('/purchasingDept')
+
+@app.route('/decline_item/<string:id>', methods=['POST'])
+@login_required
+@role_required('FinancialApprover')
+def decline_item(id):
+    if request.method == 'POST':
+
+        encrypt_ID = encrypt_data(id)
+        hex_ID = binascii.hexlify(encrypt_ID).decode()
+
+        encrypt_Deny = encrypt_data("Decline")
+        hex_Deny = binascii.hexlify(encrypt_Deny).decode() 
+
+        conn = connect_to_database()
+        cursor = conn.cursor()
+        query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
+        cursor.execute(query, ( hex_Deny , hex_ID))
+        conn.commit()
+        conn.close()
+    
+    return redirect('/purchasingDept')
 
 @app.route('/logout')
 @login_required
