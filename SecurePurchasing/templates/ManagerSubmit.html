@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Page</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #17173c, #acb6e5);
+            position: relative; /* Important for the logout button positioning */
+        }
+
+        /* Style for the Logout Button */
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 0.5rem 1rem;
+            background-color: #f44336; /* Red color for the logout button */
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .logout-btn:hover {
+            background-color: #e53935; /* Darker red on hover */
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 20px;
+            Left: 20px;
+            padding: 0.5rem 1rem;
+            background-color: #57fa75; /* Red color for the logout button */
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .back-btn:hover {
+            background-color: #33d757; /* Darker red on hover */
+        }
+
+
+        .Approval-container {
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            width: 350px;
+        }
+
+        .Approval-container h2 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            color: #333;
+        }
+
+        .Approval-container form {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-group label {
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            display: block;
+            color: #555;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            border-color: #74ebd5;
+            outline: none;
+        }
+
+        .Approval-container button {
+            padding: 0.75rem;
+            background-color: #17173c;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .Approval-container button:hover {
+            background-color: #17173c;
+        }
+
+        .Approval-container p {
+            text-align: center;
+            margin-top: 1rem;
+            color: #777;
+            font-size: 0.9rem;
+        }
+
+        .Approval-container p a {
+            color: #17173c;
+            text-decoration: none;
+        }
+
+        .Approval-container p a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Log Out Button -->
+    <button class="logout-btn" onclick="window.location.href='/logout'">Log Out</button>
+    <button class="back-btn" onclick="window.location.href='/manager'">Back</button>
+    <div class="Approval-container">
+        <h2>Approval Request</h2>
+        <form method="POST">
+            <div class="form-group">
+                <label for="Item">Item</label>
+                <input type="text" id="Item" name = "Item" placeholder="Enter your item" required>
+            </div>
+            <div class="form-group">
+                <label for="Quantity">Quantity</label>
+                <input type="number" id="Quantity" name = "Quantity" placeholder="Amount" required>
+            </div>
+            <div class="form-group">
+                <label for="Price">Price</label>
+                <input type="text" id="Price" name = "Price" placeholder="$00.00" required
+                pattern="^\d+(\.\d{2})?$" 
+                title="Enter a price with two decimal places, e.g., 10.99" 
+                oninput="formatPrice(this)">
+            </div>
+
+            <!-- JavaScript make sure that user enters dollar format-->
+            <script>
+                function formatPrice(input) {
+                    const value = input.value;
+                    // Allow only numbers and one dot
+                    input.value = value.replace(/[^0-9.]/g, '').replace(/(\.\d{2}).+$/, '$1');
+                }
+                </script>
+
+            <button type="submit">Submit Request</button>
+        </form>
+    </div>
+
+</body>
+</html>

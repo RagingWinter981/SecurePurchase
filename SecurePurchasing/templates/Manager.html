@@ -13,13 +13,17 @@
         }
 
         body {
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: linear-gradient(135deg, #17173c, #acb6e5);
-            position: relative;
-        }
+        margin-top: 2%;
+        height: max-content;
+        display: flex;
+        flex-direction: column; /* Stack items vertically */
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #17173c, #acb6e5);
+        position: relative;
+        gap: 20px; /* Add space between the containers if desired */
+    }
+
 
         .logout-btn {
             position: absolute;
@@ -184,9 +188,42 @@
                      </tbody>
                  </table>
              </div>
-
-            <p>Need to make a request? <a href="{{ url_for('employee') }}">Request Here</a></p>
-        </form>
+            <p>Need to make a request? <a href="{{ url_for('managerSubmit') }}">Request Here</a></p>
+    </div>
+    <div class="purchase-container">
+        <h2>History</h2>
+        <form>
+            <div class="form-group">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Item</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Time Requested</th>
+                            <th>Request ID</th>
+                            <th>Manager Decision</th>
+                            <th>When Decided</th>
+                            <!-- <th>Approval</th> -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for employee, item, price, quantity, time, ID, Decision, Mtime in ManagerResult %}
+                        <tr>
+                            <td>{{ employee }}</td>
+                            <td>{{ item }}</td>
+                            <td>{{ price }}</td>
+                            <td>{{ quantity }}</td>
+                            <td>{{ time }}</td>
+                            <td>{{ ID }}</td>
+                            <td>{{ Decision }}</td>
+                            <td>{{Mtime}}</td>
+                         </tr>
+                         {% endfor %}
+                     </tbody>
+                 </table>
+             </div>
     </div>
 
 </body>

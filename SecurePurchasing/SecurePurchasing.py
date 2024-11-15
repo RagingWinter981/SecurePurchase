@@ -269,6 +269,71 @@ def employee():
    
     return render_template('Employee.html')
 
+@app.route('/managerSubmit', methods=['GET', 'POST'])
+@role_required(['Manager'])
+@login_required
+def managerSubmit():
+    if request.method == 'POST':
+        item = request.form.get('Item')
+        price = request.form.get('Price')
+        quantity = request.form.get('Quantity')
+        requestID = random.randint(1000, 9999)
+        employeeTimeRequest = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print(f"Print Quantity", quantity, "Print Price", price)
+        try:
+            with odbc.connect(connection_string) as conn:
+                cursor = conn.cursor()
+
+                # Fetch the employee name using the current user's ID
+                employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+                cursor.execute(employee_query, (current_user.id,))
+                rows = cursor.fetchall()
+
+                row = rows[0]
+
+                # Extract the employee name and manager name from the row tuple
+                employee = row[0]
+                manager = row[1]
+
+                # Encrypts each value using AES-128
+                encrypt_item = encrypt_data(item)
+                encrypt_price = encrypt_data(str(price))
+                encrpt_quantity = encrypt_data(str(quantity))
+                encrypt_requestID = encrypt_data(str(requestID))
+                encrypt_employeeTimeRequest = encrypt_data(str(employeeTimeRequest))
+
+                # Changes the value to hex to put into the database
+                input_item = binascii.hexlify(encrypt_item).decode()
+                input_price = binascii.hexlify(encrypt_price).decode()
+                input_quantity = binascii.hexlify(encrpt_quantity).decode()
+                input_requestID = binascii.hexlify(encrypt_requestID).decode()
+                input_employeeTimeRequest = binascii.hexlify(encrypt_employeeTimeRequest).decode()
+
+                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName) VALUES (?, ?, ?, ?, ?, ?, ?)")
+                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
+                
+
+                # Decrypt to verify
+                decrypted_item = decrypt_data(binascii.unhexlify(input_item))
+                decrypted_price = decrypt_data(binascii.unhexlify(input_price))
+                decrypted_quantity = decrypt_data(binascii.unhexlify(input_quantity))
+                decrypted_requestID = decrypt_data(binascii.unhexlify(input_requestID))
+                decrypted_employeeTimeRequest = decrypt_data(binascii.unhexlify(input_employeeTimeRequest))
+
+                print("Decrypted Item:", decrypted_item, "Decrypt Price: ", decrypted_price, "Decrypt Quantity: ", decrypted_quantity, "Decrypt, Request ID: ", decrypted_requestID, "Time Requested: ", decrypted_employeeTimeRequest)
+
+                print(f"Executing query: {query1} with parameters: {(employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager)}")
+
+                conn.commit()
+                
+                return redirect(url_for('managerSubmit'))
+
+        except Exception as e:
+            print(f"Error: {e}")
+   
+    return render_template('managerSubmit.html')
+
 @app.route('/manager')
 @role_required('Manager')
 @login_required
@@ -276,8 +341,8 @@ def manager():
 
     conn = connect_to_database()
     cursor = conn.cursor()
-    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, RequestID FROM Request WHERE managerApprove IS NULL")
-    cursor.execute(RetrieveQuery, ())
+    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, RequestID FROM Request WHERE managerApprove IS NULL AND ReEmployee IN (Select Employee From Employees where UserId = ? OR Employee in (Select e.Employee From Employees as e, Employees as s Where s.Employee = e.Manager AND s.UserId = ?))")
+    cursor.execute(RetrieveQuery, (current_user.id, current_user.id))
     ManagerInfo = cursor.fetchall()
     conn.close()
 
@@ -298,7 +363,32 @@ def manager():
 
         decrypted_manager_info.append(tuple(decrypted_row))
 
-    return render_template('Manager.html', ManagerInfo=decrypted_manager_info)
+
+    conn = connect_to_database()
+    cursor = conn.cursor()
+    RetrieveResultQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, RequestID, managerApprove, managerTimeStamp FROM Request WHERE managerApprove IS NOT NULL AND ReEmployee IN (Select Employee From Employees where UserId = ? OR Employee in (Select e.Employee From Employees as e, Employees as s Where s.Employee = e.Manager AND s.UserId = ?))")
+    cursor.execute(RetrieveResultQuery, (current_user.id, current_user.id))
+    ManagerResult = cursor.fetchall()
+    conn.close()
+
+    encrypted_columns = [0, 1, 2, 3, 4, 5, 6, 7]
+
+    # Decrypt specific columns in the retrieved data
+    decrypted_manager_result = []
+    for row in ManagerResult:
+        decrypted_row = list(row)  # Convert tuple to list for modification
+        
+        # Only decrypt specified columns
+        for col_index in encrypted_columns:
+            if col_index < len(row):
+                # Convert hex string to bytes and decrypt
+                encrypted_bytes = binascii.unhexlify(str(row[col_index]))
+                decrypted_value = decrypt_data(encrypted_bytes)
+                decrypted_row[col_index] = decrypted_value
+
+        decrypted_manager_result.append(tuple(decrypted_row))
+
+    return render_template('Manager.html', ManagerInfo=decrypted_manager_info, ManagerResult= decrypted_manager_result)
 
 
 @app.route('/approve_item/<string:id>', methods=['POST'])
