@@ -260,9 +260,9 @@ def employee():
                     f"\n Price: {str(price)} \n "
                     f"Quantity: {quantity} \n " 
                     f"time requested: {employeeTimeRequest} \n "
-                    f"Please log into application to review."    
+                    f"Please log into the application to review."    
                 )
-                recipient = [mgrEmail]
+                recipient = mgrEmail
 
                 #sending email
                 send_email(eSubject,body, sender, recipient, app_password)
@@ -298,10 +298,7 @@ def employee():
 
                 conn.commit()
 
-                #after commmit we send email ofc to both employee and the manager of the employee if it even exists
-                #empMailDec = decrypt_data(binascii.unhexlify(empMailEnc))
-
-                
+                                
                 return redirect(url_for('employee'))
 
         except Exception as e:
@@ -335,6 +332,31 @@ def managerSubmit():
                 # Extract the employee name and manager name from the row tuple
                 employee = row[0]
                 manager = row[1]
+
+                #extracting email
+                # retrieving manager email and then crafting email to be sent for them
+                emailQuery = "SELECT Email FROM Employees WHERE EmployeeType = c7e617bbe021a2bf2bf1c2b7613bd0aa620c4741028bd01e8d6718037f83dd28"
+                cursor.execute(emailQuery)
+                rows = cursor.fetchall()
+
+                #must test in Albert's machine
+                finEmail = rows[0]
+
+                #craft email
+                eSubject = f"Incoming Manager Order Request for approval ID: {requestID}"
+                body = (
+                    f"Employee ID: {current_user.id}, has requested the following:"
+                    f"\n Item: {item}" 
+                    f"\n Price: {str(price)} \n "
+                    f"Quantity: {quantity} \n " 
+                    f"time requested: {employeeTimeRequest} \n "
+                    f"Please log into the application to review."    
+                )
+                recipient = [finEmail]
+
+                #sending email
+                send_email(eSubject,body, sender, recipient, app_password)
+                #email part stop
 
                 # Encrypts each value using AES-128
                 encrypt_item = encrypt_data(item)
@@ -457,11 +479,79 @@ def approve_item(id):
 
         encrypt_Approve = encrypt_data("Approved")
         hex_approve = binascii.hexlify(encrypt_Approve).decode()        
-
+        
+        #update signature somewhere over here lol
         conn = connect_to_database()
         cursor = conn.cursor()
         query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ? WHERE RequestID = ?"
         cursor.execute(query, (hex_managerTimeRequest, hex_approve , hex_ID))
+
+        #send email in here buddy
+        #extracting email
+        # emailing fin dept
+        emailQuery = "SELECT Email FROM Employees WHERE EmployeeType = c7e617bbe021a2bf2bf1c2b7613bd0aa620c4741028bd01e8d6718037f83dd28"
+        cursor.execute(emailQuery)
+        rows = cursor.fetchall()
+
+        #must test in Albert's machine
+        finEmail = rows[0]
+
+        ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+        cursor.execute(ReqQuery, (hex_ID, ))
+        rows = cursor.fetchall()
+
+         # albert's style
+        EmployeeName = rows[0]
+        item = rows[1]
+        price = rows[2]
+        empSubmitTime = rows[3]
+        quantity = rows[4]
+        #decrypted tell me if Im retarded
+        empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+        itemDec = decrypt_data(binascii.unhexlify(item))
+        priceDec = decrypt_data(binascii.unhexlify(price))
+        empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+        quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+        #craft email to fin
+        eSubject = f"Order: {id} has been approved by a manager"
+        body = (
+        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"Time approved: {managerTimeRequest}"
+        f"Item: {itemDec}" 
+        f"\n Price: {priceDec} \n "
+        f"Quantity: {quantityDec} \n " 
+        f"time requested: {empSubmitTimeDec} \n "
+        f"Employee that requested it: {empNameDec} \n"
+        f"Please log into the application to review."    
+        )
+        recipient = finEmail
+
+        #sending email
+        send_email(eSubject,body, sender, recipient, app_password)
+
+        empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+        cursor.execute(empEmailQuery, (empNameDec, ))
+        rows = cursor.fetchall()
+
+        #albert
+        empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+        eSubject = f" Your Order: {id} has been approved by a manager"
+        body = (
+        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"Time approved: {managerTimeRequest}"
+        f"Item: {itemDec}" 
+        f"\n Price: {priceDec} \n "
+        f"Quantity: {quantityDec} \n " 
+        f"time requested: {empSubmitTimeDec} \n "
+        f"Please log into the application to review."    
+        )
+
+        recipient = [empEmailaddDec]
+
+        send_email(eSubject,body, sender, recipient, app_password)
+
         conn.commit()
         conn.close()
     
@@ -498,6 +588,48 @@ def deny_item(id):
         cursor = conn.cursor()
         query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ? WHERE RequestID = ?"
         cursor.execute(query, (hex_managerTimeRequest, hex_Deny , hex_ID))
+
+        ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+        cursor.execute(ReqQuery, (hex_ID, ))
+        rows = cursor.fetchall()
+
+         # albert's style
+        EmployeeName = rows[0]
+        item = rows[1]
+        price = rows[2]
+        empSubmitTime = rows[3]
+        quantity = rows[4]
+        #decrypted tell me if Im retarded
+        empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+        itemDec = decrypt_data(binascii.unhexlify(item))
+        priceDec = decrypt_data(binascii.unhexlify(price))
+        empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+        quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+        empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+        cursor.execute(empEmailQuery, (empNameDec, ))
+        rows = cursor.fetchall()
+
+        #albert
+        empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+        eSubject = f" Your Order: {id} has been denied by a manager"
+        body = (
+        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"Time denied: {managerTimeRequest}"
+        f"Item: {itemDec}" 
+        f"\n Price: {priceDec} \n "
+        f"Quantity: {quantityDec} \n " 
+        f"time requested: {empSubmitTimeDec} \n "
+        f"Please log into the application to review."    
+        )
+
+        recipient = [empEmailaddDec]
+
+        send_email(eSubject,body, sender, recipient, app_password)
+
+
+
         conn.commit()
         conn.close()
     
@@ -583,6 +715,99 @@ def purchase_item(id):
         cursor = conn.cursor()
         query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
         cursor.execute(query, (hex_approve , hex_ID))
+
+        #start of jjs emails
+
+        checkIfMgrQuery ="SELECT managerName FROM Request WHERE RequestID = ?"
+        cursor.execute(checkIfMgrQuery,(hex_ID, ))
+        rows = cursor.fetchone()
+        
+        if rows:
+            mgrName = rows[0]
+            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity, managerTimeStamp FROM Request WHERE RequestID = ?"
+            cursor.execute(ReqQuery, (hex_ID, ))
+            rows = cursor.fetchall()
+
+         # albert's style
+            EmployeeName = rows[0]
+            item = rows[1]
+            price = rows[2]
+            empSubmitTime = rows[3]
+            quantity = rows[4]
+            mgrTimeStamp = rows[5]
+        #decrypted tell me if Im retarded
+            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+            mgrTimeStampDec = decrypt_data(binascii.unhexlify(mgrTimeStamp))
+
+            #crafting email
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (EmployeeName, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+            #crafting email
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (mgrName, ))
+            rows = cursor.fetchall()
+
+            mgrEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+            eSubject = f"Order: {id} has been completely approved"
+            body = (
+                   f"Manager: {decrypt_data(binascii.unhexlify(mgrName))} "
+                   f"Manager Time approved: {mgrTimeStampDec}"
+                   f"Employee Name: {empNameDec}"
+                   f"Item: {itemDec}" 
+                   f"\n Price: {priceDec} \n "
+                   f"Quantity: {quantityDec} \n " 
+                   f"time requested: {empSubmitTimeDec} \n "    
+                   )
+            recipient = [empEmailaddDec, mgrEmailaddDec]
+            send_email(eSubject,body, sender, recipient, app_password)
+        else:
+            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+            cursor.execute(ReqQuery, (hex_ID, ))
+            rows = cursor.fetchall()
+
+
+         # albert's style
+            EmployeeName = rows[0]
+            item = rows[1]
+            price = rows[2]
+            empSubmitTime = rows[3]
+            quantity = rows[4]
+        #decrypted tell me if Im retarded
+            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (empNameDec, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+            eSubject = f" Order: {id} has been completely approved"
+            body = (
+            f"Item: {itemDec}" 
+            f"\n Price: {priceDec} \n "
+            f"Quantity: {quantityDec} \n " 
+            f"time requested: {empSubmitTimeDec} \n "
+            f"Please log into the application to review."    
+            )
+            recipient = [empEmailaddDec]
+            send_email(eSubject,body, sender, recipient, app_password)
+
+
         conn.commit()
         conn.close()
     
@@ -606,6 +831,98 @@ def decline_item(id):
         cursor.execute(query, ( hex_Deny , hex_ID))
         conn.commit()
         conn.close()
+
+        #start of jjs emails
+
+        checkIfMgrQuery ="SELECT managerName FROM Request WHERE RequestID = ?"
+        cursor.execute(checkIfMgrQuery,(hex_ID, ))
+        rows = cursor.fetchone()
+        
+        if rows:
+            mgrName = rows[0]
+            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity, managerTimeStamp FROM Request WHERE RequestID = ?"
+            cursor.execute(ReqQuery, (hex_ID, ))
+            rows = cursor.fetchall()
+
+         # albert's style
+            EmployeeName = rows[0]
+            item = rows[1]
+            price = rows[2]
+            empSubmitTime = rows[3]
+            quantity = rows[4]
+            mgrTimeStamp = rows[5]
+        #decrypted tell me if Im retarded
+            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+            mgrTimeStampDec = decrypt_data(binascii.unhexlify(mgrTimeStamp))
+
+            #crafting email
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (EmployeeName, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+            #crafting email
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (mgrName, ))
+            rows = cursor.fetchall()
+
+            mgrEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+            eSubject = f"Order: {id} has been denied by financial department"
+            body = (
+                   f"Manager: {decrypt_data(binascii.unhexlify(mgrName))} "
+                   f"Manager Time approved: {mgrTimeStampDec}"
+                   f"Employee Name: {empNameDec}"
+                   f"Item: {itemDec}" 
+                   f"\n Price: {priceDec} \n "
+                   f"Quantity: {quantityDec} \n " 
+                   f"time requested: {empSubmitTimeDec} \n "    
+                   )
+            recipient = [empEmailaddDec, mgrEmailaddDec]
+            send_email(eSubject,body, sender, recipient, app_password)
+        else:
+            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+            cursor.execute(ReqQuery, (hex_ID, ))
+            rows = cursor.fetchall()
+
+
+         # albert's style
+            EmployeeName = rows[0]
+            item = rows[1]
+            price = rows[2]
+            empSubmitTime = rows[3]
+            quantity = rows[4]
+        #decrypted tell me if Im retarded
+            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (empNameDec, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+            eSubject = f" Order: {id} has been denied by financial department"
+            body = (
+            f"Item: {itemDec}" 
+            f"\n Price: {priceDec} \n "
+            f"Quantity: {quantityDec} \n " 
+            f"time requested: {empSubmitTimeDec} \n "
+            f"Please log into the application to review."    
+            )
+            recipient = [empEmailaddDec]
+            send_email(eSubject,body, sender, recipient, app_password)
+
     
     return redirect('/purchasingDept')
 
