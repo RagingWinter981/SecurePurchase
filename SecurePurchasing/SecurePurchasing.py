@@ -12,7 +12,12 @@ import binascii
 import random
 import array
 from datetime import datetime
+import smtplib
+from email.mime.text import MIMEText
 
+sender = "juanjoguti2020@gmail.com"
+
+app_password = 'vndnghrvqredwkim'
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -23,15 +28,15 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-connection_string = f"""
-  DRIVER={{{DRIVER_NAME}}};
-  SERVER={SERVER_NAME};
-  DATABASE={DATABASE_NAME};
-  Trust_Connection=yes;
-   uid=Kylee;
-  pwd=1234;
-"""
+# SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+# connection_string = f"""
+#   DRIVER={{{DRIVER_NAME}}};
+#   SERVER={SERVER_NAME};
+#   DATABASE={DATABASE_NAME};
+#   Trust_Connection=yes;
+#    uid=Kylee;
+#   pwd=1234;
+# """
 
 # # Albert Connection String
 # SERVER_NAME = 'ARIESPC'
@@ -45,16 +50,26 @@ connection_string = f"""
 # """
 
 # JJ's Connection String
-#SERVER_NAME = 'LAPTOP-JP2PAISQ'
-# connection_string = f"""
-#     DRIVER={{{DRIVER_NAME}}};
-#     SERVER={SERVER_NAME};
-#     DATABASE={DATABASE_NAME};
-#     Trust_Connection=yes;
-#      uid=;
-#     pwd=;
-# """
+SERVER_NAME = 'LAPTOP-JP2PAISQ'
+connection_string = f"""
+    DRIVER={{{DRIVER_NAME}}};
+    SERVER={SERVER_NAME};
+    DATABASE={DATABASE_NAME};
+    Trust_Connection=yes;
+     uid=;
+    pwd=;
+"""
 
+
+def send_email(subject, body, sender, recipients, password):
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = ', '.join(recipients)
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp_server:
+       smtp_server.login(sender, password)
+       smtp_server.sendmail(sender, recipients, msg.as_string())
+    print("Message sent!")
 
 #connecting to the DB
 def connect_to_database():
@@ -203,7 +218,7 @@ def get_current_user_id():
     else:
         return "No user logged in"
 
-
+#submitting req for both emp and mgr - remember a mgr aproval goes to financial dpt
 @app.route('/employee', methods=['GET', 'POST'])
 @role_required(['Employee', 'Manager', 'FinancialApprover'])
 @login_required
@@ -225,11 +240,32 @@ def employee():
                 cursor.execute(employee_query, (current_user.id,))
                 rows = cursor.fetchall()
 
-                row = rows[0]
-
                 # Extract the employee name and manager name from the row tuple
-                employee = row[0]
-                manager = row[1]
+                employee = rows[0]
+                manager = rows[1]
+
+                # retrieving manager email and then crafting email to be sent for them
+                emailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+                cursor.execute(emailQuery,(manager,))
+                rows = cursor.fetchall()
+
+                #must test in Albert's machine
+                mgrEmail = rows[0]
+
+                #craft email
+                eSubject = f"Incoming Order Request for approval ID: {requestID}"
+                body = (
+                    f"Employee ID: {current_user.id}, has requested the following:"
+                    f"\n Item: {item}" 
+                    f"\n Price: {str(price)} \n "
+                    f"Quantity: {quantity} \n " 
+                    f"time requested: {employeeTimeRequest} \n "
+                    f"Please log into application to review."    
+                )
+                recipient = [mgrEmail]
+
+                #sending email
+                send_email(eSubject,body, sender, recipient, app_password)
 
                 # Encrypts each value using AES-128
                 encrypt_item = encrypt_data(item)
@@ -261,6 +297,10 @@ def employee():
                 print(f"Executing query: {query1} with parameters: {(employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager)}")
 
                 conn.commit()
+
+                #after commmit we send email ofc to both employee and the manager of the employee if it even exists
+                #empMailDec = decrypt_data(binascii.unhexlify(empMailEnc))
+
                 
                 return redirect(url_for('employee'))
 
@@ -390,7 +430,7 @@ def manager():
 
     return render_template('Manager.html', ManagerInfo=decrypted_manager_info, ManagerResult= decrypted_manager_result)
 
-
+#JJ has to mess with this one and the deny one to send emails for when managers approve or deny lol
 @app.route('/approve_item/<string:id>', methods=['POST'])
 @login_required
 @role_required('Manager')
@@ -526,6 +566,7 @@ def purchasingDept():
 
     return render_template('PurchasingDept.html', FinAppInfo=decrypted_FinApp_info, FinAppFinal=decrypted_FinApp_Result)
 
+#email noti in here and the bottom for financial approver
 @app.route('/Purchase_item/<string:id>', methods=['POST'])
 @login_required
 @role_required('FinancialApprover')
@@ -577,7 +618,6 @@ def logout():
 if __name__ == '__main__':
     app.run(debug=True)
     
-
 
 
 
