@@ -39,26 +39,26 @@ DATABASE_NAME = 'SecurePurchase'
 # """
 
 # # Albert Connection String
-# SERVER_NAME = 'ARIESPC'
-# connection_string = f"""
-#     DRIVER={{{DRIVER_NAME}}};
-#     SERVER={SERVER_NAME};
-#     DATABASE={DATABASE_NAME};
-#     Trust_Connection=yes;
-#      uid=Aeris;
-#     pwd=1234;
-# """
-
-# JJ's Connection String
-SERVER_NAME = 'LAPTOP-JP2PAISQ'
+SERVER_NAME = 'ARIESPC'
 connection_string = f"""
     DRIVER={{{DRIVER_NAME}}};
     SERVER={SERVER_NAME};
     DATABASE={DATABASE_NAME};
     Trust_Connection=yes;
-     uid=;
-    pwd=;
+     uid=Aeris;
+    pwd=1234;
 """
+
+# JJ's Connection String
+# SERVER_NAME = 'LAPTOP-JP2PAISQ'
+# connection_string = f"""
+#     DRIVER={{{DRIVER_NAME}}};
+#     SERVER={SERVER_NAME};
+#     DATABASE={DATABASE_NAME};
+#     Trust_Connection=yes;
+#      uid=;
+#     pwd=;
+# """
 
 
 def send_email(subject, body, sender, recipients, password):
@@ -241,8 +241,8 @@ def employee():
                 rows = cursor.fetchall()
 
                 # Extract the employee name and manager name from the row tuple
-                employee = rows[0]
-                manager = rows[1]
+                employee = rows[0][0]
+                manager = rows[0][1]
 
                 # retrieving manager email and then crafting email to be sent for them
                 emailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
@@ -250,7 +250,7 @@ def employee():
                 rows = cursor.fetchall()
 
                 #must test in Albert's machine
-                mgrEmail = rows[0]
+                mgrEmail = rows[0][0]
 
                 #craft email
                 eSubject = f"Incoming Order Request for approval ID: {requestID}"
@@ -262,7 +262,8 @@ def employee():
                     f"time requested: {employeeTimeRequest} \n "
                     f"Please log into application to review."    
                 )
-                recipient = [mgrEmail]
+                recipient = decrypt_data(binascii.unhexlify(mgrEmail))
+                print(mgrEmail)
 
                 #sending email
                 send_email(eSubject,body, sender, recipient, app_password)
