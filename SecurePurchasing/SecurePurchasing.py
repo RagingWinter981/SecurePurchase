@@ -1,4 +1,3 @@
-
 import os
 from flask import Flask, render_template, request, url_for, redirect, jsonify, make_response
 import pypyodbc as odbc
@@ -14,6 +13,16 @@ import array
 from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+
+#using for RSA
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding as paddingRSA
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+import base64
 
 sender = "juanjoguti2020@gmail.com"
 
@@ -222,6 +231,7 @@ def get_current_user_id():
 @app.route('/employee', methods=['GET', 'POST'])
 @role_required(['Employee', 'Manager', 'FinancialApprover'])
 @login_required
+#add signature here for employee
 def employee():
     if request.method == 'POST':
         item = request.form.get('Item')
@@ -241,8 +251,10 @@ def employee():
                 rows = cursor.fetchall()
 
                 # Extract the employee name and manager name from the row tuple
-                employee = rows[0]
-                manager = rows[1]
+                employee = rows[0][0]
+                manager = rows[0][1]
+
+                employeeDecrypted = decrypt_data( binascii.unhexlify(rows[0]) )
 
                 # retrieving manager email and then crafting email to be sent for them
                 emailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
@@ -250,12 +262,12 @@ def employee():
                 rows = cursor.fetchall()
 
                 #must test in Albert's machine
-                mgrEmail = rows[0]
+                mgrEmail = decrypt_data( binascii.unhexlify(rows[0][0]) )
 
                 #craft email
                 eSubject = f"Incoming Order Request for approval ID: {requestID}"
                 body = (
-                    f"Employee ID: {current_user.id}, has requested the following:"
+                    f"Emmployee: {employeeDecrypted} with ID: {current_user.id}, has requested the following:"
                     f"\n Item: {item}" 
                     f"\n Price: {str(price)} \n "
                     f"Quantity: {quantity} \n " 
@@ -281,8 +293,39 @@ def employee():
                 input_requestID = binascii.hexlify(encrypt_requestID).decode()
                 input_employeeTimeRequest = binascii.hexlify(encrypt_employeeTimeRequest).decode()
 
-                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName) VALUES (?, ?, ?, ?, ?, ?, ?)")
-                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
+                #signing the request
+                reqSignature = employeeDecrypted + item + str(price) + str(quantity) + str(employeeTimeRequest)
+
+                messageToSign = reqSignature.encode('UTF-8')
+
+                #fetching Private key to sign
+                retrieveQuery = "SELECT PrivateKey FROM Employees WHERE Employee = ?"
+                cursor.execute(retrieveQuery, (employee, ))
+                rows = cursor.fetchall()
+
+                rtrPrvKey = rows [0][0]
+                #retrieving private key
+                prvBytes = base64.b64decode(rtrPrvKey)
+                recprvBytes = serialization.load_pem_private_key(
+                              prvBytes,
+                              password=None,
+                              backend=default_backend()
+                              )
+                #getting signature
+                signature = recprvBytes.sign(
+                            messageToSign,
+                            paddingRSA.PSS(
+                                mgf=paddingRSA.MGF1(hashes.SHA256()),
+                                salt_length=paddingRSA.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256())
+                #encoding to base 64 to add to DB
+                signatureBase64 = base64.b64encode(signature).decode('UTF-8')
+
+
+                #
+                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName, employeeSignature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager, signatureBase64))
                 
 
                 # Decrypt to verify
@@ -309,6 +352,7 @@ def employee():
 @app.route('/managerSubmit', methods=['GET', 'POST'])
 @role_required(['Manager'])
 @login_required
+#add signature in here for employee lol on mgr type
 def managerSubmit():
     if request.method == 'POST':
         item = request.form.get('Item')
@@ -333,6 +377,8 @@ def managerSubmit():
                 employee = row[0]
                 manager = row[1]
 
+                empNameDec = decrypt_data( binascii.unhexlify(rows[0][0]) )
+
                 #extracting email
                 # retrieving manager email and then crafting email to be sent for them
                 emailQuery = "SELECT Email FROM Employees WHERE EmployeeType = c7e617bbe021a2bf2bf1c2b7613bd0aa620c4741028bd01e8d6718037f83dd28"
@@ -340,7 +386,7 @@ def managerSubmit():
                 rows = cursor.fetchall()
 
                 #must test in Albert's machine
-                finEmail = rows[0]
+                finEmail = decrypt_data( binascii.unhexlify(rows[0][0]) )
 
                 #craft email
                 eSubject = f"Incoming Manager Order Request for approval ID: {requestID}"
@@ -372,8 +418,37 @@ def managerSubmit():
                 input_requestID = binascii.hexlify(encrypt_requestID).decode()
                 input_employeeTimeRequest = binascii.hexlify(encrypt_employeeTimeRequest).decode()
 
-                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName) VALUES (?, ?, ?, ?, ?, ?, ?)")
-                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
+                #signing the request
+                reqSignature = empNameDec + item + str(price) + str(quantity) + str(employeeTimeRequest)
+
+                messageToSign = reqSignature.encode('UTF-8')
+
+                #fetching Private key to sign
+                retrieveQuery = "SELECT PrivateKey FROM Employees WHERE Employee = ?"
+                cursor.execute(retrieveQuery, (employee, ))
+                rows = cursor.fetchall()
+
+                rtrPrvKey = rows [0][0]
+                #retrieving private key
+                prvBytes = base64.b64decode(rtrPrvKey)
+                recprvBytes = serialization.load_pem_private_key(
+                              prvBytes,
+                              password=None,
+                              backend=default_backend()
+                              )
+                #getting signature
+                signature = recprvBytes.sign(
+                            messageToSign,
+                            paddingRSA.PSS(
+                                mgf=paddingRSA.MGF1(hashes.SHA256()),
+                                salt_length=paddingRSA.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256())
+                #encoding to base 64 to add to DB
+                signatureBase64 = base64.b64encode(signature).decode('UTF-8')
+
+                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName, employeeSignature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager, signatureBase64))
                 
 
                 # Decrypt to verify
@@ -453,6 +528,7 @@ def manager():
     return render_template('Manager.html', ManagerInfo=decrypted_manager_info, ManagerResult= decrypted_manager_result)
 
 #JJ has to mess with this one and the deny one to send emails for when managers approve or deny lol
+#add signature in here for mgr only tho
 @app.route('/approve_item/<string:id>', methods=['POST'])
 @login_required
 @role_required('Manager')
@@ -467,10 +543,53 @@ def approve_item(id):
 
         conn = connect_to_database()
         cursor = conn.cursor()
-        employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+
+        employee_query = "SELECT Employee, PrivateKey FROM Employees WHERE UserId = ?"
         cursor.execute(employee_query, (current_user.id,))
-        rows = cursor.fetchone()
-        managerName = rows[0]
+        rows = cursor.fetchall()
+        managerName = rows[0][0]
+
+        rtrPrvKey = rows[0][1]
+        #retrieving private key
+        prvBytes = base64.b64decode(rtrPrvKey)
+        recprvBytes = serialization.load_pem_private_key(
+                              prvBytes,
+                              password=None,
+                              backend=default_backend()
+                              )
+        
+        req_query = "SELECT ReEmployee, Item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+        cursor.execute(req_query, (hex_ID,))
+        rows = cursor.fetchall()
+
+        reqEmpName = rows[0][0]
+        item = rows[0][1]
+        price = rows[0][2]
+        employeeTimeRequest = rows[0][3]
+        quantity = rows[0][4]
+
+        decEmpName = decrypt_data(binascii.unhexlify(reqEmpName))
+        itemDec = decrypt_data(binascii.unhexlify(item))
+        priceDec = decrypt_data(binascii.unhexlify(price))
+        timeDec = decrypt_data(binascii.unhexlify(employeeTimeRequest))
+        quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+        #signing the request
+        reqSignature = decEmpName + itemDec + priceDec + quantityDec + timeDec
+
+        messageToSign = reqSignature.encode('UTF-8')
+
+        #getting signature
+        signature = recprvBytes.sign(
+                            messageToSign,
+                            paddingRSA.PSS(
+                                mgf=paddingRSA.MGF1(hashes.SHA256()),
+                                salt_length=paddingRSA.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256())
+                #encoding to base 64 to add to DB
+        signatureBase64 = base64.b64encode(signature).decode('UTF-8')
+
 
         encrypt_managerName = encrypt_data(managerName)
         hex_managerName = binascii.hexlify(encrypt_managerName).decode()
@@ -480,11 +599,9 @@ def approve_item(id):
         encrypt_Approve = encrypt_data("Approved")
         hex_approve = binascii.hexlify(encrypt_Approve).decode()        
         
-        #update signature somewhere over here lol
-        conn = connect_to_database()
-        cursor = conn.cursor()
-        query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ? WHERE RequestID = ?"
-        cursor.execute(query, (hex_managerTimeRequest, hex_approve , hex_ID))
+        #inserting extra info with signature
+        query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ?, managerSignature = ? WHERE RequestID = ?"
+        cursor.execute(query, (hex_managerTimeRequest, hex_approve, signatureBase64, hex_ID, ))
 
         #send email in here buddy
         #extracting email
@@ -494,18 +611,18 @@ def approve_item(id):
         rows = cursor.fetchall()
 
         #must test in Albert's machine
-        finEmail = rows[0]
+        finEmail = decrypt_data( binascii.unhexlify(rows[0][0]) )
 
         ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
         cursor.execute(ReqQuery, (hex_ID, ))
         rows = cursor.fetchall()
 
          # albert's style
-        EmployeeName = rows[0]
-        item = rows[1]
-        price = rows[2]
-        empSubmitTime = rows[3]
-        quantity = rows[4]
+        EmployeeName = rows[0][0]
+        item = rows[0][1]
+        price = rows[0][2]
+        empSubmitTime = rows[0][3]
+        quantity = rows[0][4]
         #decrypted tell me if Im retarded
         empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
         itemDec = decrypt_data(binascii.unhexlify(item))
@@ -535,7 +652,7 @@ def approve_item(id):
         rows = cursor.fetchall()
 
         #albert
-        empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+        empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
 
         eSubject = f" Your Order: {id} has been approved by a manager"
         body = (
@@ -548,7 +665,7 @@ def approve_item(id):
         f"Please log into the application to review."    
         )
 
-        recipient = [empEmailaddDec]
+        recipient = empEmailaddDec
 
         send_email(eSubject,body, sender, recipient, app_password)
 
@@ -624,7 +741,7 @@ def deny_item(id):
         f"Please log into the application to review."    
         )
 
-        recipient = [empEmailaddDec]
+        recipient = empEmailaddDec
 
         send_email(eSubject,body, sender, recipient, app_password)
 
@@ -713,8 +830,7 @@ def purchase_item(id):
 
         conn = connect_to_database()
         cursor = conn.cursor()
-        query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
-        cursor.execute(query, (hex_approve , hex_ID))
+
 
         #start of jjs emails
 
@@ -729,12 +845,12 @@ def purchase_item(id):
             rows = cursor.fetchall()
 
          # albert's style
-            EmployeeName = rows[0]
-            item = rows[1]
-            price = rows[2]
-            empSubmitTime = rows[3]
-            quantity = rows[4]
-            mgrTimeStamp = rows[5]
+            EmployeeName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            empSubmitTime = rows[0][3]
+            quantity = rows[0][4]
+            mgrTimeStamp = rows[0][5]
         #decrypted tell me if Im retarded
             empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
             itemDec = decrypt_data(binascii.unhexlify(item))
@@ -743,23 +859,106 @@ def purchase_item(id):
             quantityDec = decrypt_data(binascii.unhexlify(quantity))
             mgrTimeStampDec = decrypt_data(binascii.unhexlify(mgrTimeStamp))
 
-            #crafting email
-            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            #crafting email and retrieving public keys
+            empEmailQuery = "SELECT Email, PublicKey FROM Employees WHERE Employee = ?"
             cursor.execute(empEmailQuery, (EmployeeName, ))
             rows = cursor.fetchall()
 
         #albert
-            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+            rtrPubKeyEmp = rows[0][1]
 
             #crafting email
-            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            empEmailQuery = "SELECT Email, PublicKey FROM Employees WHERE Employee = ?"
             cursor.execute(empEmailQuery, (mgrName, ))
             rows = cursor.fetchall()
 
-            mgrEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+            mgrEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+            rtrPubKeyMgr = rows[0][1]
 
-            eSubject = f"Order: {id} has been completely approved"
-            body = (
+            #generating public key objects
+            pubBytesEmp = base64.b64decode(rtrPubKeyEmp)
+            pubBytesMgr = base64.b64decode(rtrPubKeyMgr)
+
+            recpubBytesEmp = serialization.load_pem_public_key(
+            pubBytesEmp,
+            backend=default_backend()
+            )
+
+            recpubBytesMgr = serialization.load_pem_public_key(
+            pubBytesMgr,
+            backend=default_backend()
+            )
+
+            #pub key objects have been generated now verifying signatures (both must be verified)
+            req_query = "SELECT ReEmployee, Item, price, employeeTimeRequest, employeeSignature, managerSignature FROM Request WHERE RequestID = ?"
+            cursor.execute(req_query, (hex_ID,))
+            rows = cursor.fetchall()
+
+            reqEmpName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            employeeTimeRequest = rows[0][3]
+            empSignBase64 = rows[0][4]
+            mgrSignBase64 = rows[0][5]
+
+            decEmpName = decrypt_data(binascii.unhexlify(reqEmpName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            timeDec = decrypt_data(binascii.unhexlify(employeeTimeRequest))
+
+            empSign= base64.b64decode(empSignBase64)
+            mgrSign= base64.b64decode(mgrSignBase64)
+
+
+
+            #getting message for signature
+            reqSignature = decEmpName + itemDec + priceDec + quantityDec + timeDec
+
+            messageToSign = reqSignature.encode('UTF-8')
+
+            #verifying both signatures: 
+            valid_signature_emp = False
+            try:
+                recpubBytesEmp.verify(
+                    empSign,
+                    messageToSign,
+                    paddingRSA.PSS(
+                        mgf=paddingRSA.MGF1(hashes.SHA256()),
+                        salt_length=paddingRSA.PSS.MAX_LENGTH
+                                ),
+                                 hashes.SHA256()
+                                )
+
+                valid_signature_emp = True
+                print("The employee signature is valid.")
+            except Exception as e:
+                valid_signature_emp = False
+                print(f"An error occurred emp sign invalid: {e}")
+            
+            valid_signature_mgr = False
+            try:
+                recpubBytesMgr.verify(
+                    mgrSign,
+                    messageToSign,
+                    paddingRSA.PSS(
+                        mgf=paddingRSA.MGF1(hashes.SHA256()),
+                        salt_length=paddingRSA.PSS.MAX_LENGTH
+                                ),
+                                 hashes.SHA256()
+                                )
+
+                valid_signature_mgr = True
+                print("The manager signature is valid.")
+            except Exception as e:
+                valid_signature_mgr = False
+                print(f"An error occurred mgr sign invalid: {e}")
+            
+
+
+            if( valid_signature_mgr and valid_signature_emp): 
+                eSubject = f"Order: {id} has been completely approved"
+                body = (
                    f"Manager: {decrypt_data(binascii.unhexlify(mgrName))} "
                    f"Manager Time approved: {mgrTimeStampDec}"
                    f"Employee Name: {empNameDec}"
@@ -768,44 +967,87 @@ def purchase_item(id):
                    f"Quantity: {quantityDec} \n " 
                    f"time requested: {empSubmitTimeDec} \n "    
                    )
-            recipient = [empEmailaddDec, mgrEmailaddDec]
-            send_email(eSubject,body, sender, recipient, app_password)
+                recipient = [empEmailaddDec, mgrEmailaddDec]
+                send_email(eSubject,body, sender, recipient, app_password)
+
+                query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
+                cursor.execute(query, (hex_approve , hex_ID))
         else:
-            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
-            cursor.execute(ReqQuery, (hex_ID, ))
+            #pub key objects have been generated now verifying signatures (both must be verified)
+            req_query = "SELECT ReEmployee, Item, price, employeeTimeRequest, employeeSignature, quantity FROM Request WHERE RequestID = ?"
+            cursor.execute(req_query, (hex_ID,))
             rows = cursor.fetchall()
 
+            reqEmpName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            employeeTimeRequest = rows[0][3]
+            empSignBase64 = rows[0][4]
+            quantity = rows[0][5]
 
-         # albert's style
-            EmployeeName = rows[0]
-            item = rows[1]
-            price = rows[2]
-            empSubmitTime = rows[3]
-            quantity = rows[4]
-        #decrypted tell me if Im retarded
-            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            decEmpName = decrypt_data(binascii.unhexlify(reqEmpName))
             itemDec = decrypt_data(binascii.unhexlify(item))
             priceDec = decrypt_data(binascii.unhexlify(price))
-            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            timeDec = decrypt_data(binascii.unhexlify(employeeTimeRequest))
             quantityDec = decrypt_data(binascii.unhexlify(quantity))
 
-            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
-            cursor.execute(empEmailQuery, (empNameDec, ))
+            empSign= base64.b64decode(empSignBase64)
+
+            #crafting email and retrieving public keys
+            empEmailQuery = "SELECT Email, PublicKey FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (EmployeeName, ))
             rows = cursor.fetchall()
 
         #albert
-            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+            rtrPubKeyEmp = rows[0][1]
 
-            eSubject = f" Order: {id} has been completely approved"
-            body = (
-            f"Item: {itemDec}" 
-            f"\n Price: {priceDec} \n "
-            f"Quantity: {quantityDec} \n " 
-            f"time requested: {empSubmitTimeDec} \n "
-            f"Please log into the application to review."    
+            #generating public key object
+            pubBytesEmp = base64.b64decode(rtrPubKeyEmp)
+
+            recpubBytesEmp = serialization.load_pem_public_key(
+            pubBytesEmp,
+            backend=default_backend()
             )
-            recipient = [empEmailaddDec]
-            send_email(eSubject,body, sender, recipient, app_password)
+
+            #getting message for signature
+            reqSignature = decEmpName + itemDec + priceDec + quantityDec + timeDec
+
+            messageToSign = reqSignature.encode('UTF-8')
+
+            #verifying both signatures: 
+            valid_signature_emp = False
+            try:
+                recpubBytesEmp.verify(
+                    empSign,
+                    messageToSign,
+                    paddingRSA.PSS(
+                        mgf=paddingRSA.MGF1(hashes.SHA256()),
+                        salt_length=paddingRSA.PSS.MAX_LENGTH
+                                ),
+                                 hashes.SHA256()
+                                )
+
+                valid_signature_emp = True
+                print("The employee signature is valid.")
+            except Exception as e:
+                valid_signature_emp = False
+                print(f"An error occurred emp sign invalid: {e}")
+            
+            if(valid_signature_emp):
+                eSubject = f" Order: {id} has been completely approved"
+                body = (
+                f"Item: {itemDec}" 
+                f"\n Price: {priceDec} \n "
+                f"Quantity: {quantityDec} \n " 
+                f"time requested: {empSubmitTimeDec} \n "
+                f"Please log into the application to review."    
+                )
+                recipient = [empEmailaddDec]
+                send_email(eSubject,body, sender, recipient, app_password)
+
+                query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
+                cursor.execute(query, (hex_approve , hex_ID))
 
 
         conn.commit()
