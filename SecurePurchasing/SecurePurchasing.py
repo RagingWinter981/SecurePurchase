@@ -1,4 +1,3 @@
-
 import os
 from flask import Flask, render_template, request, url_for, redirect, jsonify, make_response
 import pypyodbc as odbc
@@ -14,6 +13,16 @@ import array
 from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+
+#using for RSA
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding as paddingRSA
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+import base64
 
 sender = "juanjoguti2020@gmail.com"
 
@@ -39,26 +48,26 @@ DATABASE_NAME = 'SecurePurchase'
 # """
 
 # # Albert Connection String
-SERVER_NAME = 'ARIESPC'
-connection_string = f"""
-    DRIVER={{{DRIVER_NAME}}};
-    SERVER={SERVER_NAME};
-    DATABASE={DATABASE_NAME};
-    Trust_Connection=yes;
-     uid=Aeris;
-    pwd=1234;
-"""
-
-# JJ's Connection String
-# SERVER_NAME = 'LAPTOP-JP2PAISQ'
+# SERVER_NAME = 'ARIESPC'
 # connection_string = f"""
 #     DRIVER={{{DRIVER_NAME}}};
 #     SERVER={SERVER_NAME};
 #     DATABASE={DATABASE_NAME};
 #     Trust_Connection=yes;
-#      uid=;
-#     pwd=;
+#      uid=Aeris;
+#     pwd=1234;
 # """
+
+# JJ's Connection String
+SERVER_NAME = 'LAPTOP-JP2PAISQ'
+connection_string = f"""
+    DRIVER={{{DRIVER_NAME}}};
+    SERVER={SERVER_NAME};
+    DATABASE={DATABASE_NAME};
+    Trust_Connection=yes;
+     uid=;
+    pwd=;
+"""
 
 
 def send_email(subject, body, sender, recipients, password):
@@ -222,6 +231,7 @@ def get_current_user_id():
 @app.route('/employee', methods=['GET', 'POST'])
 @role_required(['Employee', 'Manager', 'FinancialApprover'])
 @login_required
+#add signature here for employee
 def employee():
     if request.method == 'POST':
         item = request.form.get('Item')
@@ -244,26 +254,30 @@ def employee():
                 employee = rows[0][0]
                 manager = rows[0][1]
 
+                employeeDecrypted = decrypt_data( binascii.unhexlify(employee) )
+
+                print("\nemployeeDecrypted: \n")
+                print(employeeDecrypted)
+
                 # retrieving manager email and then crafting email to be sent for them
                 emailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
                 cursor.execute(emailQuery,(manager,))
                 rows = cursor.fetchall()
 
                 #must test in Albert's machine
-                mgrEmail = rows[0][0]
+                mgrEmail = decrypt_data( binascii.unhexlify(rows[0][0]) )
 
                 #craft email
                 eSubject = f"Incoming Order Request for approval ID: {requestID}"
                 body = (
-                    f"Employee ID: {current_user.id}, has requested the following:"
+                    f"Emmployee: {employeeDecrypted} with ID: {current_user.id}, has requested the following:"
                     f"\n Item: {item}" 
                     f"\n Price: {str(price)} \n "
                     f"Quantity: {quantity} \n " 
                     f"time requested: {employeeTimeRequest} \n "
-                    f"Please log into application to review."    
+                    f"Please log into the application to review."    
                 )
-                recipient = decrypt_data(binascii.unhexlify(mgrEmail))
-                print(mgrEmail)
+                recipient = mgrEmail
 
                 #sending email
                 send_email(eSubject,body, sender, recipient, app_password)
@@ -282,8 +296,39 @@ def employee():
                 input_requestID = binascii.hexlify(encrypt_requestID).decode()
                 input_employeeTimeRequest = binascii.hexlify(encrypt_employeeTimeRequest).decode()
 
-                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName) VALUES (?, ?, ?, ?, ?, ?, ?)")
-                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
+                #signing the request
+                reqSignature = employeeDecrypted + item + str(price) + str(quantity) + str(employeeTimeRequest)
+
+                messageToSign = reqSignature.encode('UTF-8')
+
+                #fetching Private key to sign
+                retrieveQuery = "SELECT PrivateKey FROM Employees WHERE Employee = ?"
+                cursor.execute(retrieveQuery, (employee, ))
+                rows = cursor.fetchall()
+
+                rtrPrvKey = rows [0][0]
+                #retrieving private key
+                prvBytes = base64.b64decode(rtrPrvKey)
+                recprvBytes = serialization.load_pem_private_key(
+                              prvBytes,
+                              password=None,
+                              backend=default_backend()
+                              )
+                #getting signature
+                signature = recprvBytes.sign(
+                            messageToSign,
+                            paddingRSA.PSS(
+                                mgf=paddingRSA.MGF1(hashes.SHA256()),
+                                salt_length=paddingRSA.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256())
+                #encoding to base 64 to add to DB
+                signatureBase64 = base64.b64encode(signature).decode('UTF-8')
+
+
+                #
+                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName, employeeSignature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager, signatureBase64))
                 
 
                 # Decrypt to verify
@@ -299,10 +344,7 @@ def employee():
 
                 conn.commit()
 
-                #after commmit we send email ofc to both employee and the manager of the employee if it even exists
-                #empMailDec = decrypt_data(binascii.unhexlify(empMailEnc))
-
-                
+                                
                 return redirect(url_for('employee'))
 
         except Exception as e:
@@ -313,6 +355,7 @@ def employee():
 @app.route('/managerSubmit', methods=['GET', 'POST'])
 @role_required(['Manager'])
 @login_required
+#add signature in here for employee lol on mgr type
 def managerSubmit():
     if request.method == 'POST':
         item = request.form.get('Item')
@@ -337,6 +380,33 @@ def managerSubmit():
                 employee = row[0]
                 manager = row[1]
 
+                empNameDec = decrypt_data( binascii.unhexlify(rows[0][0]) )
+
+                #extracting email
+                # retrieving manager email and then crafting email to be sent for them
+                emailQuery = "SELECT Email FROM Employees WHERE EmployeeType = 'c7e617bbe021a2bf2bf1c2b7613bd0aa620c4741028bd01e8d6718037f83dd28'"
+                cursor.execute(emailQuery)
+                rows = cursor.fetchall()
+
+                #must test in Albert's machine
+                finEmail = decrypt_data( binascii.unhexlify(rows[0][0]) )
+
+                #craft email
+                eSubject = f"Incoming Manager Order Request for approval ID: {requestID}"
+                body = (
+                    f"Employee ID: {current_user.id}, has requested the following:"
+                    f"\n Item: {item}" 
+                    f"\n Price: {str(price)} \n "
+                    f"Quantity: {quantity} \n " 
+                    f"time requested: {employeeTimeRequest} \n "
+                    f"Please log into the application to review."    
+                )
+                recipient = [finEmail]
+
+                #sending email
+                send_email(eSubject,body, sender, recipient, app_password)
+                #email part stop
+
                 # Encrypts each value using AES-128
                 encrypt_item = encrypt_data(item)
                 encrypt_price = encrypt_data(str(price))
@@ -351,8 +421,37 @@ def managerSubmit():
                 input_requestID = binascii.hexlify(encrypt_requestID).decode()
                 input_employeeTimeRequest = binascii.hexlify(encrypt_employeeTimeRequest).decode()
 
-                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName) VALUES (?, ?, ?, ?, ?, ?, ?)")
-                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager))
+                #signing the request
+                reqSignature = empNameDec + item + str(price) + str(quantity) + str(employeeTimeRequest)
+
+                messageToSign = reqSignature.encode('UTF-8')
+
+                #fetching Private key to sign
+                retrieveQuery = "SELECT PrivateKey FROM Employees WHERE Employee = ?"
+                cursor.execute(retrieveQuery, (employee, ))
+                rows = cursor.fetchall()
+
+                rtrPrvKey = rows [0][0]
+                #retrieving private key
+                prvBytes = base64.b64decode(rtrPrvKey)
+                recprvBytes = serialization.load_pem_private_key(
+                              prvBytes,
+                              password=None,
+                              backend=default_backend()
+                              )
+                #getting signature
+                signature = recprvBytes.sign(
+                            messageToSign,
+                            paddingRSA.PSS(
+                                mgf=paddingRSA.MGF1(hashes.SHA256()),
+                                salt_length=paddingRSA.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256())
+                #encoding to base 64 to add to DB
+                signatureBase64 = base64.b64encode(signature).decode('UTF-8')
+
+                query1 = (f"INSERT INTO Request (ReEmployee, Item, price, quantity, RequestID, employeeTimeRequest, managerName, employeeSignature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+                cursor.execute(query1, (employee, input_item, input_price, input_quantity, input_requestID, input_employeeTimeRequest, manager, signatureBase64))
                 
 
                 # Decrypt to verify
@@ -432,6 +531,7 @@ def manager():
     return render_template('Manager.html', ManagerInfo=decrypted_manager_info, ManagerResult= decrypted_manager_result)
 
 #JJ has to mess with this one and the deny one to send emails for when managers approve or deny lol
+#add signature in here for mgr only tho
 @app.route('/approve_item/<string:id>', methods=['POST'])
 @login_required
 @role_required('Manager')
@@ -446,10 +546,53 @@ def approve_item(id):
 
         conn = connect_to_database()
         cursor = conn.cursor()
-        employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
+
+        employee_query = "SELECT Employee, PrivateKey FROM Employees WHERE UserId = ?"
         cursor.execute(employee_query, (current_user.id,))
-        rows = cursor.fetchone()
-        managerName = rows[0]
+        rows = cursor.fetchall()
+        managerName = rows[0][0]
+
+        rtrPrvKey = rows[0][1]
+        #retrieving private key
+        prvBytes = base64.b64decode(rtrPrvKey)
+        recprvBytes = serialization.load_pem_private_key(
+                              prvBytes,
+                              password=None,
+                              backend=default_backend()
+                              )
+        
+        req_query = "SELECT ReEmployee, Item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+        cursor.execute(req_query, (hex_ID,))
+        rows = cursor.fetchall()
+
+        reqEmpName = rows[0][0]
+        item = rows[0][1]
+        price = rows[0][2]
+        employeeTimeRequest = rows[0][3]
+        quantity = rows[0][4]
+
+        decEmpName = decrypt_data(binascii.unhexlify(reqEmpName))
+        itemDec = decrypt_data(binascii.unhexlify(item))
+        priceDec = decrypt_data(binascii.unhexlify(price))
+        timeDec = decrypt_data(binascii.unhexlify(employeeTimeRequest))
+        quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+        #signing the request
+        reqSignature = decEmpName + itemDec + priceDec + quantityDec + timeDec
+
+        messageToSign = reqSignature.encode('UTF-8')
+
+        #getting signature
+        signature = recprvBytes.sign(
+                            messageToSign,
+                            paddingRSA.PSS(
+                                mgf=paddingRSA.MGF1(hashes.SHA256()),
+                                salt_length=paddingRSA.PSS.MAX_LENGTH
+                            ),
+                            hashes.SHA256())
+                #encoding to base 64 to add to DB
+        signatureBase64 = base64.b64encode(signature).decode('UTF-8')
+
 
         encrypt_managerName = encrypt_data(managerName)
         hex_managerName = binascii.hexlify(encrypt_managerName).decode()
@@ -458,11 +601,77 @@ def approve_item(id):
 
         encrypt_Approve = encrypt_data("Approved")
         hex_approve = binascii.hexlify(encrypt_Approve).decode()        
+        
+        #inserting extra info with signature
+        query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ?, managerSignature = ? WHERE RequestID = ?"
+        cursor.execute(query, (hex_managerTimeRequest, hex_approve, signatureBase64, hex_ID, ))
 
-        conn = connect_to_database()
-        cursor = conn.cursor()
-        query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ? WHERE RequestID = ?"
-        cursor.execute(query, (hex_managerTimeRequest, hex_approve , hex_ID))
+        #send email in here buddy
+        #extracting email
+        # emailing fin dept
+        emailQuery = "SELECT Email FROM Employees WHERE EmployeeType = 'c7e617bbe021a2bf2bf1c2b7613bd0aa620c4741028bd01e8d6718037f83dd28'"
+        cursor.execute(emailQuery)
+        rows = cursor.fetchall()
+
+        #must test in Albert's machine
+        finEmail = decrypt_data( binascii.unhexlify(rows[0][0]) )
+
+        ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+        cursor.execute(ReqQuery, (hex_ID, ))
+        rows = cursor.fetchall()
+
+         # albert's style
+        EmployeeName = rows[0][0]
+        item = rows[0][1]
+        price = rows[0][2]
+        empSubmitTime = rows[0][3]
+        quantity = rows[0][4]
+        #decrypted tell me if Im retarded
+        empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+        itemDec = decrypt_data(binascii.unhexlify(item))
+        priceDec = decrypt_data(binascii.unhexlify(price))
+        empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+        quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+        #craft email to fin
+        eSubject = f"Order: {id} has been approved by a manager"
+        body = (
+        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"Time approved: {managerTimeRequest}"
+        f"Item: {itemDec}" 
+        f"\n Price: {priceDec} \n "
+        f"Quantity: {quantityDec} \n " 
+        f"time requested: {empSubmitTimeDec} \n "
+        f"Employee that requested it: {empNameDec} \n"
+        f"Please log into the application to review."    
+        )
+        recipient = finEmail
+
+        #sending email
+        send_email(eSubject,body, sender, recipient, app_password)
+
+        empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+        cursor.execute(empEmailQuery, (EmployeeName, ))
+        rows = cursor.fetchall()
+
+        #albert
+        empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+
+        eSubject = f" Your Order: {id} has been approved by a manager"
+        body = (
+        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"Time approved: {managerTimeRequest}"
+        f"Item: {itemDec}" 
+        f"\n Price: {priceDec} \n "
+        f"Quantity: {quantityDec} \n " 
+        f"time requested: {empSubmitTimeDec} \n "
+        f"Please log into the application to review."    
+        )
+
+        recipient = empEmailaddDec
+
+        send_email(eSubject,body, sender, recipient, app_password)
+
         conn.commit()
         conn.close()
     
@@ -484,8 +693,8 @@ def deny_item(id):
         cursor = conn.cursor()
         employee_query = "SELECT Employee, Manager FROM Employees WHERE UserId = ?"
         cursor.execute(employee_query, (current_user.id,))
-        rows = cursor.fetchone()
-        managerName = rows[0]
+        rows = cursor.fetchall()
+        managerName = rows[0][0]
 
         encrypt_managerName = encrypt_data(managerName)
         hex_managerName = binascii.hexlify(encrypt_managerName).decode()
@@ -499,6 +708,51 @@ def deny_item(id):
         cursor = conn.cursor()
         query = "UPDATE Request SET managerTimeStamp = ?, managerApprove = ? WHERE RequestID = ?"
         cursor.execute(query, (hex_managerTimeRequest, hex_Deny , hex_ID))
+
+        ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+        cursor.execute(ReqQuery, (hex_ID, ))
+        rows = cursor.fetchall()
+
+         # albert's style
+        EmployeeName = rows[0][0]
+        item = rows[0][1]
+        price = rows[0][2]
+        empSubmitTime = rows[0][3]
+        quantity = rows[0][4]
+        #decrypted tell me if Im retarded
+        empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+        itemDec = decrypt_data(binascii.unhexlify(item))
+        priceDec = decrypt_data(binascii.unhexlify(price))
+        empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+        quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+        empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+        cursor.execute(empEmailQuery, (EmployeeName, ))
+        rows = cursor.fetchone()
+
+        print("\n Email Fetched:\n")
+        print(rows)
+
+        #albert
+        empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0]))
+
+        eSubject = f" Your Order: {id} has been denied by a manager"
+        body = (
+        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"Time denied: {managerTimeRequest}"
+        f"Item: {itemDec}" 
+        f"\n Price: {priceDec} \n "
+        f"Quantity: {quantityDec} \n " 
+        f"time requested: {empSubmitTimeDec} \n "
+        f"Please log into the application to review."    
+        )
+
+        recipient = empEmailaddDec
+
+        send_email(eSubject,body, sender, recipient, app_password)
+
+
+
         conn.commit()
         conn.close()
     
@@ -582,8 +836,226 @@ def purchase_item(id):
 
         conn = connect_to_database()
         cursor = conn.cursor()
-        query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
-        cursor.execute(query, (hex_approve , hex_ID))
+
+
+        #start of jjs emails
+
+        checkIfMgrQuery ="SELECT managerName FROM Request WHERE RequestID = ?"
+        cursor.execute(checkIfMgrQuery,(hex_ID, ))
+        rows = cursor.fetchone()
+        
+        if rows:
+            mgrName = rows[0]
+            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity, managerTimeStamp FROM Request WHERE RequestID = ?"
+            cursor.execute(ReqQuery, (hex_ID, ))
+            rows = cursor.fetchall()
+
+         # albert's style
+            EmployeeName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            empSubmitTime = rows[0][3]
+            quantity = rows[0][4]
+            mgrTimeStamp = rows[0][5]
+        #decrypted tell me if Im retarded
+            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+            mgrTimeStampDec = decrypt_data(binascii.unhexlify(mgrTimeStamp))
+
+            #crafting email and retrieving public keys
+            empEmailQuery = "SELECT Email, PublicKey FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (EmployeeName, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+            rtrPubKeyEmp = rows[0][1]
+
+            #crafting email
+            empEmailQuery = "SELECT Email, PublicKey FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (mgrName, ))
+            rows = cursor.fetchall()
+
+            mgrEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+            rtrPubKeyMgr = rows[0][1]
+
+            #generating public key objects
+            pubBytesEmp = base64.b64decode(rtrPubKeyEmp)
+            pubBytesMgr = base64.b64decode(rtrPubKeyMgr)
+
+            recpubBytesEmp = serialization.load_pem_public_key(
+            pubBytesEmp,
+            backend=default_backend()
+            )
+
+            recpubBytesMgr = serialization.load_pem_public_key(
+            pubBytesMgr,
+            backend=default_backend()
+            )
+
+            #pub key objects have been generated now verifying signatures (both must be verified)
+            req_query = "SELECT ReEmployee, Item, price, employeeTimeRequest, employeeSignature, managerSignature FROM Request WHERE RequestID = ?"
+            cursor.execute(req_query, (hex_ID,))
+            rows = cursor.fetchall()
+
+            reqEmpName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            employeeTimeRequest = rows[0][3]
+            empSignBase64 = rows[0][4]
+            mgrSignBase64 = rows[0][5]
+
+            decEmpName = decrypt_data(binascii.unhexlify(reqEmpName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            timeDec = decrypt_data(binascii.unhexlify(employeeTimeRequest))
+
+            empSign= base64.b64decode(empSignBase64)
+            mgrSign= base64.b64decode(mgrSignBase64)
+
+
+
+            #getting message for signature
+            reqSignature = decEmpName + itemDec + priceDec + quantityDec + timeDec
+
+            messageToSign = reqSignature.encode('UTF-8')
+
+            #verifying both signatures: 
+            valid_signature_emp = False
+            try:
+                recpubBytesEmp.verify(
+                    empSign,
+                    messageToSign,
+                    paddingRSA.PSS(
+                        mgf=paddingRSA.MGF1(hashes.SHA256()),
+                        salt_length=paddingRSA.PSS.MAX_LENGTH
+                                ),
+                                 hashes.SHA256()
+                                )
+
+                valid_signature_emp = True
+                print("The employee signature is valid.")
+            except Exception as e:
+                valid_signature_emp = False
+                print(f"An error occurred emp sign invalid: {e}")
+            
+            valid_signature_mgr = False
+            try:
+                recpubBytesMgr.verify(
+                    mgrSign,
+                    messageToSign,
+                    paddingRSA.PSS(
+                        mgf=paddingRSA.MGF1(hashes.SHA256()),
+                        salt_length=paddingRSA.PSS.MAX_LENGTH
+                                ),
+                                 hashes.SHA256()
+                                )
+
+                valid_signature_mgr = True
+                print("The manager signature is valid.")
+            except Exception as e:
+                valid_signature_mgr = False
+                print(f"An error occurred mgr sign invalid: {e}")
+            
+
+
+            if( valid_signature_mgr and valid_signature_emp): 
+                eSubject = f"Order: {id} has been completely approved"
+                body = (
+                   f"Manager: {decrypt_data(binascii.unhexlify(mgrName))} "
+                   f"Manager Time approved: {mgrTimeStampDec}"
+                   f"Employee Name: {empNameDec}"
+                   f"Item: {itemDec}" 
+                   f"\n Price: {priceDec} \n "
+                   f"Quantity: {quantityDec} \n " 
+                   f"time requested: {empSubmitTimeDec} \n "    
+                   )
+                recipient = [empEmailaddDec, mgrEmailaddDec]
+                send_email(eSubject,body, sender, recipient, app_password)
+
+                query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
+                cursor.execute(query, (hex_approve , hex_ID))
+        else:
+            #pub key objects have been generated now verifying signatures (both must be verified)
+            req_query = "SELECT ReEmployee, Item, price, employeeTimeRequest, employeeSignature, quantity FROM Request WHERE RequestID = ?"
+            cursor.execute(req_query, (hex_ID,))
+            rows = cursor.fetchall()
+
+            reqEmpName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            employeeTimeRequest = rows[0][3]
+            empSignBase64 = rows[0][4]
+            quantity = rows[0][5]
+
+            decEmpName = decrypt_data(binascii.unhexlify(reqEmpName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            timeDec = decrypt_data(binascii.unhexlify(employeeTimeRequest))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+            empSign= base64.b64decode(empSignBase64)
+
+            #crafting email and retrieving public keys
+            empEmailQuery = "SELECT Email, PublicKey FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (EmployeeName, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+            rtrPubKeyEmp = rows[0][1]
+
+            #generating public key object
+            pubBytesEmp = base64.b64decode(rtrPubKeyEmp)
+
+            recpubBytesEmp = serialization.load_pem_public_key(
+            pubBytesEmp,
+            backend=default_backend()
+            )
+
+            #getting message for signature
+            reqSignature = decEmpName + itemDec + priceDec + quantityDec + timeDec
+
+            messageToSign = reqSignature.encode('UTF-8')
+
+            #verifying both signatures: 
+            valid_signature_emp = False
+            try:
+                recpubBytesEmp.verify(
+                    empSign,
+                    messageToSign,
+                    paddingRSA.PSS(
+                        mgf=paddingRSA.MGF1(hashes.SHA256()),
+                        salt_length=paddingRSA.PSS.MAX_LENGTH
+                                ),
+                                 hashes.SHA256()
+                                )
+
+                valid_signature_emp = True
+                print("The employee signature is valid.")
+            except Exception as e:
+                valid_signature_emp = False
+                print(f"An error occurred emp sign invalid: {e}")
+            
+            if(valid_signature_emp):
+                eSubject = f" Order: {id} has been completely approved"
+                body = (
+                f"Item: {itemDec}" 
+                f"\n Price: {priceDec} \n "
+                f"Quantity: {quantityDec} \n " 
+                f"time requested: {empSubmitTimeDec} \n "
+                f"Please log into the application to review."    
+                )
+                recipient = [empEmailaddDec]
+                send_email(eSubject,body, sender, recipient, app_password)
+
+                query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
+                cursor.execute(query, (hex_approve , hex_ID))
+
+
         conn.commit()
         conn.close()
     
@@ -605,8 +1077,103 @@ def decline_item(id):
         cursor = conn.cursor()
         query = "UPDATE Request SET isPurchased = ? WHERE RequestID = ?"
         cursor.execute(query, ( hex_Deny , hex_ID))
-        conn.commit()
-        conn.close()
+        cursor.commit()
+        
+
+        #start of jjs emails
+
+        checkIfMgrQuery ="SELECT managerName FROM Request WHERE RequestID = ?"
+        cursor.execute(checkIfMgrQuery,(hex_ID, ))
+        rows = cursor.fetchone()
+        
+        if rows:
+            mgrName = rows[0]
+            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity, managerTimeStamp FROM Request WHERE RequestID = ?"
+            cursor.execute(ReqQuery, (hex_ID, ))
+            rows = cursor.fetchall()
+
+         # albert's style
+            EmployeeName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            empSubmitTime = rows[0][3]
+            quantity = rows[0][4]
+            mgrTimeStamp = rows[0][5]
+        #decrypted tell me if Im retarded
+            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+            mgrTimeStampDec = decrypt_data(binascii.unhexlify(mgrTimeStamp))
+
+            #crafting email
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (EmployeeName, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+
+            #crafting email
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (mgrName, ))
+            rows = cursor.fetchall()
+
+            mgrEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+
+            eSubject = f"Order: {id} has been denied by financial department"
+            body = (
+                   f"Manager: {decrypt_data(binascii.unhexlify(mgrName))} "
+                   f"Manager Time approved: {mgrTimeStampDec}"
+                   f"Employee Name: {empNameDec}"
+                   f"Item: {itemDec}" 
+                   f"\n Price: {priceDec} \n "
+                   f"Quantity: {quantityDec} \n " 
+                   f"time requested: {empSubmitTimeDec} \n "    
+                   )
+            recipient = [empEmailaddDec, mgrEmailaddDec]
+            send_email(eSubject,body, sender, recipient, app_password)
+        else:
+            ReqQuery = "SELECT ReEmployee, item, price, employeeTimeRequest, quantity FROM Request WHERE RequestID = ?"
+            cursor.execute(ReqQuery, (hex_ID, ))
+            rows = cursor.fetchall()
+
+
+         # albert's style
+            EmployeeName = rows[0][0]
+            item = rows[0][1]
+            price = rows[0][2]
+            empSubmitTime = rows[0][3]
+            quantity = rows[0][4]
+        #decrypted tell me if Im retarded
+            empNameDec = decrypt_data(binascii.unhexlify(EmployeeName))
+            itemDec = decrypt_data(binascii.unhexlify(item))
+            priceDec = decrypt_data(binascii.unhexlify(price))
+            empSubmitTimeDec = decrypt_data(binascii.unhexlify(empSubmitTime))
+            quantityDec = decrypt_data(binascii.unhexlify(quantity))
+
+            empEmailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+            cursor.execute(empEmailQuery, (EmployeeName, ))
+            rows = cursor.fetchall()
+
+        #albert
+            empEmailaddDec = decrypt_data(binascii.unhexlify(rows[0][0]))
+
+            eSubject = f" Order: {id} has been denied by financial department"
+            body = (
+            f"Item: {itemDec}" 
+            f"\n Price: {priceDec} \n "
+            f"Quantity: {quantityDec} \n " 
+            f"time requested: {empSubmitTimeDec} \n "
+            f"Please log into the application to review."    
+            )
+            recipient = [empEmailaddDec]
+            send_email(eSubject,body, sender, recipient, app_password)
+
+            conn.commit()
+            conn.close()
+
     
     return redirect('/purchasingDept')
 
@@ -618,454 +1185,3 @@ def logout():
 
 if __name__ == '__main__':
     app.run(debug=True)
-    
-
-
-
-
-
-
-
-# # User class implementing UserMixin
-# class User(UserMixin):
-#     def __init__(self, user_id):
-#         self.id = user_id
-
-# # Function to check user credentials
-# def check_credentials(username, password, ssn):
-#     conn = connect_to_database()
-#     cursor = conn.cursor()
-
-#     encrypted_ssn = encrypt_data(ssn)
-#     hex_encrypted_ssn = binascii.hexlify(encrypted_ssn).decode()
-
-#     query = f"SELECT * FROM UserInfo WHERE fName = ? AND lName = ? AND ssn = ?"
-#     cursor.execute(query, (username, password, hex_encrypted_ssn ))
-#     user_id = cursor.fetchone()
-#     conn.close()
-#     return user_id
-
-# login_manager = LoginManager()
-# login_manager.init_app(app)
-# login_manager.login_view = "login"
-
-# @login_manager.user_loader
-# def load_user(user_id):
-#     return User(user_id)
-
-# def generate_validationNum():
-#     #using secrets to generate 10 random pin
-#     return ''.join(secrets.choice('0123456789') for _ in range(10))
-
-# def decrypt_data(ciphertext):
-#     key = b'\xfd\x91\xdb\xdc\x9d\x9a\xb5\x86\x18\xab\xf4\x9c\x85\xd1\x1d\xff'
-#     iv = b'\x82\x0b\xa9\x3d\x9b\x0e\x9a\x1c\x3c\xee\x4a\xf1\x98\x36\xcd\xd7'
-#     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-#     decryptor = cipher.decryptor()
-#     decrypted_data = decryptor.update(ciphertext) + decryptor.finalize()
-#     unpadder = padding.PKCS7(128).unpadder()
-#     unpadded_data = unpadder.update(decrypted_data) + unpadder.finalize()
-#     return unpadded_data.decode()
-
-#     # Function to encrypt data
-# def encrypt_data(data):
-#     key = b'\xfd\x91\xdb\xdc\x9d\x9a\xb5\x86\x18\xab\xf4\x9c\x85\xd1\x1d\xff'
-#     iv = b'\x82\x0b\xa9\x3d\x9b\x0e\x9a\x1c\x3c\xee\x4a\xf1\x98\x36\xcd\xd7'
-#     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
-#     encryptor = cipher.encryptor()
-#     padder = padding.PKCS7(128).padder()
-#     padded_data = padder.update(data.encode()) + padder.finalize()
-#     ciphertext = encryptor.update(padded_data) + encryptor.finalize()
-#     return ciphertext
-
-# @app.route('/')
-# def login():
-#     return render_template('login.html')
-
-# @app.route('/login_form', methods=['POST'])
-# def login_form():
-# #    username = request.form.get('firstName')
-# #    password = request.form.get('lastName')
-# #    ssn = request.form.get('SSN')
-
-#  #   user_id = check_credentials(username, password, ssn)
-#   #  if user_id:
-#    #     user = User(user_id)
-#     #    login_user(user)
-#      #   return redirect(url_for('home'))
-#   #  else:
-#    #     return render_template('login.html', info='Invalid User or Password')
-#     username = request.form.get('firstName')
-#     password = request.form.get('lastName')
-#     ssn = request.form.get('SSN')
-
-#     user_info = check_credentials(username, password, ssn)
-#     if user_info:
-#         user_id = user_info[0]  # Get the fifth item from the tuple (index starts from 0)
-#         user = User(user_id)
-#         login_user(user)
-#         return redirect(url_for('home'))
-#     else:
-#         return render_template('login.html', info='Invalid User or Password')
-
-# # Route to get the current user's ID
-# @app.route('/current_user_id')
-# def get_current_user_id():
-#     if current_user.is_authenticated:
-#         return f"Current user ID: {current_user.id}"
-#     else:
-#         return "No user logged in"
-
-# @app.route('/home')
-# @login_required
-# def home():
-#     return render_template('home.html')
-
-# @app.route('/CLA')
-# @login_required
-# def CLA():
-#     return render_template('CLApage.html')
-
-# @app.route("/setCert", methods=["POST"])
-# def setCert():
-#     if request.method == "POST":
-#         #save cert num to the database
-#         validationNum = generate_validationNum()
-#         encrypted_validation_number = encrypt_data(validationNum)
-
-#         hex_encrypted_validation_number = binascii.hexlify(encrypted_validation_number).decode()
-
-#         conn = connect_to_database()
-#         cursor = conn.cursor()
-#         query1 = f"Select verificationNumber FROM UserInfo WHERE verificationNumber = ?"
-#         cursor.execute(query1, (hex_encrypted_validation_number, ))
-#         numRow= len(cursor.fetchall())
-#         print("Numbebr of valid num: ", numRow)
-#         conn.commit() 
-#         conn.close()
-
-#         if(numRow == 0):
-
-#             # Get the current user's details
-#             user_id = current_user.id
-
-#             conn = connect_to_database()
-#             cursor = conn.cursor()
-#             query1 = f"UPDATE UserInfo SET verificationNumber = ? WHERE ID = ? AND verificationNumber IS NULL"
-#             cursor.execute(query1, (hex_encrypted_validation_number, str(user_id)))
-#             print(user_id)
-#             conn.commit() 
-#             conn.close()
-
-            
-#             user_id = current_user.id
-            
-#             conn = connect_to_database()
-#             cursor = conn.cursor()
-#             getValid = f"Select verificationNumber FROM UserInfo WHERE ID = ? "
-#             cursor.execute(getValid, (str(user_id),))
-#             validationNum = cursor.fetchone()
-#             conn.commit() 
-#             conn.close()
-#         else:
-#             setCert()
-
-#                     # Extract the encrypted validation number from the row
-#         database_encrypted_validation_number = binascii.unhexlify(validationNum[0])
-
-#         # Decrypt the validation number for display
-#         decrypted_validation_number = decrypt_data(database_encrypted_validation_number)
-             
-#         return render_template('CLApage.html', validationNum=decrypted_validation_number)
-#     else:
-#         return render_template('CLApage.html')
-    
-# #JJ additions
-# # to validate the votes before putting them into the CTF
-# def validate_vote(validationNumber):
-#     # Connect to the CLA database
-#     connCLA = connect_to_database()
-#     cursorCLA = connCLA.cursor()
-
-#     # Query to check if the validationNumber exists in the UserInfo table
-#     query = "SELECT COUNT(*) FROM UserInfo WHERE verificationNumber = ?"
-#     cursorCLA.execute(query, (validationNumber,))
-
-#     # Fetch the result to see if the validationNumber is present
-#     result = cursorCLA.fetchone()
-#     is_valid = result[0] > 0  # True if count is greater than 0, otherwise False
-
-#     # Cleanup CLA database connections
-#     cursorCLA.close()
-#     connCLA.close()
-
-#     # Return whether the validationNumber was found
-#     return is_valid
-
-# #the following function will be used to check if there's a duplicate for a vote in the CTF
-# # if there's  a duplicate then the function returns 1 and the vote shouldn't be validated
-# # Else it returns 0 and the vote should be validated
-# def checkForDup(validationNum):
-#     # Connect to the database
-#     connCTF = connect_to_CTF_database()
-#     cursorCTF = connCTF.cursor()
-
-#     # Prepare the SQL query to check if the validation number is already in the Info table
-#     query = "SELECT COUNT(*) FROM Info WHERE ValidationNum = ?"
-
-#     # Execute the SQL query with parameter substitution to prevent SQL Injection
-#     cursorCTF.execute(query, (validationNum,))
-
-#     # Fetch the result
-#     result = cursorCTF.fetchone()
-
-#     # first element is the count obtained from the query
-#     if result[0] > 0:
-#         isValid = "False"  # Validation number exists in the database
-#     else:
-#         isValid = "True"  # Validation number does not exist in the database
-   
-#     cursorCTF.close()
-#     connCTF.close()
-
-#     return isValid
-  
-# def check_that_Everyone_Has_Voted():
-#     connCTF = connect_to_CTF_database()
-#     cursorCTF = connCTF.cursor()
-
-#     connCLA = connect_to_database()
-#     cursorCLA = connCLA.cursor()
-
-#     # Query to check for any NULL or empty verification numbers in UserInfo
-#     checkQuery = """
-#     SELECT COUNT(*) FROM UserInfo 
-#     WHERE verificationNumber IS NULL OR verificationNumber = ''
-#     """
-#     cursorCLA.execute(checkQuery)
-    
-#     # If the count is greater than 0, return False immediately
-#     if cursorCLA.fetchone()[0] > 0:
-#         cursorCLA.close()
-#         connCLA.close()
-#         cursorCTF.close()
-#         connCTF.close()
-#         return False
-#     else:
-#         #query to get all verificationNumbers from UserInfo
-#         claQuery = "SELECT verificationNumber FROM UserInfo"
-#         cursorCLA.execute(claQuery)
-
-#         #loading results into an entire array
-#         existingVerificationNumbers = {row[0] for row in cursorCLA.fetchall()}
-
-#         # Fetch all validated numbers from CTF where IsValidated is true
-#         cursorCTF.execute("SELECT ValidationNum FROM Info WHERE IsValidated = 'True'")
-#         #loading all valid votes from table and just getting the verification number
-#         voteValidationNumbers = {row[0] for row in cursorCTF.fetchall()}
-
-#         #checking if all numbers of the CLA are in the CTF
-#         EveryoneVoted = existingVerificationNumbers.issubset(voteValidationNumbers)
-
-#         return EveryoneVoted
-
-# def check_if_votes_have_been_tallied():
-#     connCTF = connect_to_CTF_database()
-#     cursorCTF = connCTF.cursor()
-
-#     #Querying to see if any Tally is greater than 0
-#     #Meaning that someone messed with the database
-#     query = "SELECT COUNT(*) FROM Candidates WHERE Tally > 0"
-
-#     cursorCTF.execute(query)
-#     results = cursorCTF.fetchone()
-
-#     if results[0] > 0:
-#         return "True"
-#     else:
-#         return "False"
-
-# @app.route('/showResults', methods=["POST"])
-# def tabulateFinalResults():
-#     areVotesTallied = check_if_votes_have_been_tallied()
-#     hasEveryoneVoted = check_that_Everyone_Has_Voted()
-
-#     if(areVotesTallied == "False"):
-#         if(hasEveryoneVoted == True):
-#             connCTF = connect_to_CTF_database()
-#             cursorCTF = connCTF.cursor()
-
-#             # Query to get valid votes and calculate total per candidate
-#             vote_query = """
-#                 SELECT Vote, COUNT(*) as VoteCount
-#                 FROM Info
-#                 WHERE isValidated = 'True'
-#                 GROUP BY Vote
-#             """
-#             cursorCTF.execute(vote_query)
-#             votes = cursorCTF.fetchall()
-        
-#             # Update candidates' tallies directly
-#             update_query = """
-#                 UPDATE Candidates
-#                 SET Tally = ?
-#                 WHERE ID = ?
-#             """
-#             # Prepare data for update
-#             updates = [(vote[1], vote[0]) for vote in votes]
-#             cursorCTF.executemany(update_query, updates)
-#             connCTF.commit()
-
-#             # Fetch updated candidate tallies
-#             fetchTalliesQuery = "SELECT CandidateName, Tally FROM Candidates ORDER BY ID"
-#             cursorCTF.execute(fetchTalliesQuery)
-#             results = cursorCTF.fetchall()
-
-#             # Fetch voter IDs and their voted candidates
-#             voters_query = """
-#                 SELECT i.IdentNum, c.CandidateName
-#                 FROM Info i
-#                 JOIN Candidates c ON i.Vote = c.ID
-#                 WHERE i.isValidated = 'True'
-#                 ORDER BY c.CandidateName
-#             """
-#             cursorCTF.execute(voters_query)
-#             encrypted_voter_info = cursorCTF.fetchall()
-
-#             # Decrypt voter IdentNums
-#             # for voter in encrypted_voter_info: 
-#             #     encrypted_IdentNum = binascii.unhexlify(voter[0])
-
-#             voter_info = [(decrypt_data(binascii.unhexlify(voter[0])), voter[1]) for voter in encrypted_voter_info]
-
-#             # Building the HTML output
-#             output = "<h1>Vote Tally for Candidates</h1><table border='1'><tr><th>Candidate Name</th><th>Vote Tally</th></tr>"
-#             for result in results:
-#                 output += f"<tr><td>{result[0]}</td><td>{result[1]}</td></tr>"
-#             output += "</table>"
-
-#             output += "<h2>Voter Details</h2><table border='1'><tr><th>Identification Number</th><th>Voted for</th></tr>"
-#             for voter in voter_info:
-#                 output += f"<tr><td>{voter[0]}</td><td>{voter[1]}</td></tr>"
-#             output += "</table>"
-#             return output
-#         else:
-#             output = "<h1>Not everyone has voted please wait</h1>"
-#         return output
-#     elif (areVotesTallied == "True"):
-#          # Fetch updated candidate tallies
-#             fetchTalliesQuery = "SELECT CandidateName, Tally FROM Candidates ORDER BY ID"
-#             connCTF = connect_to_CTF_database()
-#             cursorCTF = connCTF.cursor()
-#             cursorCTF.execute(fetchTalliesQuery)
-#             results = cursorCTF.fetchall()
-
-#             # Fetch voter IDs and their voted candidates
-#             voters_query = """
-#                 SELECT i.IdentNum, c.CandidateName
-#                 FROM Info i
-#                 JOIN Candidates c ON i.Vote = c.ID
-#                 WHERE i.isValidated = 'True'
-#                 ORDER BY c.CandidateName
-#             """
-#             cursorCTF.execute(voters_query)
-#             encrypted_voter_info = cursorCTF.fetchall()
-
-#             # Decrypt voter IdentNums
-#             # for voter in encrypted_voter_info: 
-#             #     encrypted_IdentNum = binascii.unhexlify(voter[0])
-
-#             voter_info = [(decrypt_data(binascii.unhexlify(voter[0])), voter[1]) for voter in encrypted_voter_info]
-
-#             # Building the HTML output
-#             output = "<h1>Vote Tally for Candidates</h1><table border='1'><tr><th>Candidate Name</th><th>Vote Tally</th></tr>"
-#             for result in results:
-#                 output += f"<tr><td>{result[0]}</td><td>{result[1]}</td></tr>"
-#             output += "</table>"
-
-#             output += "<h2>Voter Details</h2><table border='1'><tr><th>Identification Number</th><th>Voted for</th></tr>"
-#             for voter in voter_info:
-#                 output += f"<tr><td>{voter[0]}</td><td>{voter[1]}</td></tr>"
-#             output += "</table>"
-#             return output
-        
-# @app.route('/CTF')
-# @login_required
-# def CTF():
-#     return render_template('CTFpage.html')
-
-# @app.route("/setPIN", methods=["POST"])
-# def setPIN():
-#     dupVote = "False"
-#     validVote = "False"
-#     isValidVerNum = False
-#     if request.method == "POST":
-#         userRandPIN = request.form["randomPIN"]
-#         userValidnum = request.form["validNum"]
-#         userVote= request.form["vote"]
-        
-
-#         encrypted_Identification_number = encrypt_data(userRandPIN)
-#         encrypted_Verification_number = encrypt_data(userValidnum)
-#         encrypted_Vote = encrypt_data(userVote)
-
-#         hex_encrypted_Identification_number = binascii.hexlify(encrypted_Identification_number).decode()
-#         hex_encrypted_Verification_number = binascii.hexlify(encrypted_Verification_number).decode()
-#         hex_encrypted_Vote = binascii.hexlify(encrypted_Vote).decode()
-
-#         # Get the current user's details
-#         user_id = current_user.id
-
-#         conn = connect_to_CTF_database()
-#         cursor = conn.cursor()
-#         query1 = f"SELECT * From Info Where IdentNum = ?"
-#         cursor.execute(query1, (hex_encrypted_Identification_number, ))
-#         NumOfRow = len(cursor.fetchall())
-#         print("Number of IdentNum Rows: ",NumOfRow)
-#         conn.commit() 
-#         conn.close()
-#         if(NumOfRow == 0):
-#             #now checking if there's a duplicate verification number
-#             isValidVerNum = validate_vote(hex_encrypted_Verification_number)
-#             dupVote = checkForDup(hex_encrypted_Verification_number)
-#             if((isValidVerNum == True) and (dupVote == "True") ):
-#                 validVote = "True"
-
-#             conn = connect_to_CTF_database()
-#             cursor = conn.cursor()
-#             query1 = f"INSERT INTO Info(IdentNum, ValidationNum, Vote, isValidated) VALUES (? , ?, ?, ?)"
-#             cursor.execute(query1, (hex_encrypted_Identification_number, hex_encrypted_Verification_number, hex_encrypted_Vote, validVote))
-#             NumOfRow=cursor.rowcount
-            
-#             print(user_id)
-#             conn.commit()
-#             conn.close()
-#         else:
-
-#             conn = connect_to_CTF_database()
-#             cursor = conn.cursor()
-#             CheckVote = f"SELECT * From Info Where IdentNum = ? AND ValidationNum = ?"
-#             cursor.execute(CheckVote, (hex_encrypted_Identification_number, hex_encrypted_Verification_number))
-#             NumOfRow = len(cursor.fetchall())
-#             conn.commit()
-#             print("Number of rows for Ident And Valid: ",NumOfRow)
-#             conn.close()
-#             if(NumOfRow > 0):
-#                 print("Already Voted")
-
-#             else:
-#                 print("Idenification Number has already been choosen.")
-
-
-        
-#         #updating PIN where SSN is already set
-#         #convertingrandomPIN just in case
-#         return render_template('CTFpage.html', userRandPIN=userRandPIN)
-#     else:
-#         return render_template('CTFpage.html')
-    
-# @app.route("/logout")
-# def logout():
-#     logout_user()
-#     return redirect('/')
-
