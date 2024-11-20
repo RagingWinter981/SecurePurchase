@@ -270,7 +270,7 @@ def employee():
                 #craft email
                 eSubject = f"Incoming Order Request for approval ID: {requestID}"
                 body = (
-                    f"Emmployee: {employeeDecrypted} with ID: {current_user.id}, has requested the following:"
+                    f"Employee: {employeeDecrypted} with ID: {current_user.id}, has requested the following:"
                     f"\n Item: {item}" 
                     f"\n Price: {str(price)} \n "
                     f"Quantity: {quantity} \n " 
