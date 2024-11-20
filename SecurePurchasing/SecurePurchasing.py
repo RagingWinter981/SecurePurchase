@@ -37,15 +37,15 @@ DATABASE_NAME = 'SecurePurchase'
 
 
 # Kylee Connection String
-# SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
-# connection_string = f"""
-#   DRIVER={{{DRIVER_NAME}}};
-#   SERVER={SERVER_NAME};
-#   DATABASE={DATABASE_NAME};
-#   Trust_Connection=yes;
-#    uid=Kylee;
-#   pwd=1234;
-# """
+SERVER_NAME = 'LAPTOP-TT3C4QN9\SQLEXPRESS'
+connection_string = f"""
+  DRIVER={{{DRIVER_NAME}}};
+  SERVER={SERVER_NAME};
+  DATABASE={DATABASE_NAME};
+  Trust_Connection=yes;
+   uid=Kylee;
+  pwd=1234;
+"""
 
 # # Albert Connection String
 # SERVER_NAME = 'ARIESPC'
@@ -59,15 +59,15 @@ DATABASE_NAME = 'SecurePurchase'
 # """
 
 # JJ's Connection String
-SERVER_NAME = 'LAPTOP-JP2PAISQ'
-connection_string = f"""
-    DRIVER={{{DRIVER_NAME}}};
-    SERVER={SERVER_NAME};
-    DATABASE={DATABASE_NAME};
-    Trust_Connection=yes;
-     uid=;
-    pwd=;
-"""
+# SERVER_NAME = 'LAPTOP-JP2PAISQ'
+# connection_string = f"""
+#     DRIVER={{{DRIVER_NAME}}};
+#     SERVER={SERVER_NAME};
+#     DATABASE={DATABASE_NAME};
+#     Trust_Connection=yes;
+#      uid=;
+#     pwd=;
+# """
 
 
 def send_email(subject, body, sender, recipients, password):
@@ -441,7 +441,7 @@ def managerSubmit():
                 #craft email
                 eSubject = f"Incoming Manager Order Request for approval ID: {requestID}"
                 body = (
-                    f"Employee ID: {current_user.id}, has requested the following:"
+                    f"Employee ID: {decrypt_data(binascii.unhexlify(current_user.id))}, has requested the following:"
                     f"\n Item: {item}" 
                     f"\n Price: {str(price)} \n "
                     f"Quantity: {quantity} \n " 
@@ -812,7 +812,7 @@ def deny_item(id):
 def purchasingDept():
     conn = connect_to_database()
     cursor = conn.cursor()
-    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, managerName, managerApprove, managerTimeStamp, RequestID FROM Request Where IsPurchased IS NULL AND managerApprove IS NOT NULL")
+    RetrieveQuery = (f"SELECT ReEmployee, Item, price, quantity, employeeTimeRequest, managerName, managerApprove, managerTimeStamp, RequestID FROM Request Where IsPurchased IS NULL AND managerApprove IS NOT NULL AND managerApprove = 'd13b1dee9c34720e4af11adf70d2e4c8'")
     cursor.execute(RetrieveQuery, ())
     FinAppInfo = cursor.fetchall()
     conn.close()
