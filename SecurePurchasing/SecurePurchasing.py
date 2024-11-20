@@ -227,6 +227,7 @@ def get_current_user_id():
     else:
         return "No user logged in"
 
+
 #submitting req for both emp and mgr - remember a mgr aproval goes to financial dpt
 @app.route('/employee', methods=['GET', 'POST'])
 @role_required(['Employee', 'Manager', 'FinancialApprover'])
@@ -254,10 +255,7 @@ def employee():
                 employee = rows[0][0]
                 manager = rows[0][1]
 
-                employeeDecrypted = decrypt_data( binascii.unhexlify(employee) )
-
-                print("\nemployeeDecrypted: \n")
-                print(employeeDecrypted)
+                employeeDecrypted = decrypt_data( binascii.unhexlify(rows[0][0]) )
 
                 # retrieving manager email and then crafting email to be sent for them
                 emailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
@@ -270,7 +268,7 @@ def employee():
                 #craft email
                 eSubject = f"Incoming Order Request for approval ID: {requestID}"
                 body = (
-                    f"Employee: {employeeDecrypted} with ID: {current_user.id}, has requested the following:"
+                    f"Employee: {employeeDecrypted} with ID: {decrypt_data(binascii.unhexlify(current_user.id))}, has requested the following:"
                     f"\n Item: {item}" 
                     f"\n Price: {str(price)} \n "
                     f"Quantity: {quantity} \n " 
@@ -281,6 +279,31 @@ def employee():
 
                 #sending email
                 send_email(eSubject,body, sender, recipient, app_password)
+
+                #sending email to employee
+                # retrieving emp email and then crafting email to be sent for them
+                emailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+                cursor.execute(emailQuery,(employee,))
+                rows = cursor.fetchall()
+
+                empEmail = decrypt_data(binascii.unhexlify(rows[0][0]))
+
+                #craft email
+                eSubject = f"Order ID: {requestID} has been submitted for approval"
+                body = (
+                    f"Employee: {employeeDecrypted} with ID: {decrypt_data(binascii.unhexlify(current_user.id))}, has requested the following:"
+                    f"\n Item: {item}" 
+                    f"\n Price: {str(price)} \n "
+                    f"Quantity: {quantity} \n " 
+                    f"time requested: {employeeTimeRequest} \n "
+                    f"Please log into the application to review."    
+                )
+                recipient = empEmail
+
+                #sending email
+                send_email(eSubject,body, sender, recipient, app_password)
+
+
 
                 # Encrypts each value using AES-128
                 encrypt_item = encrypt_data(item)
@@ -382,11 +405,35 @@ def managerSubmit():
 
                 empNameDec = decrypt_data( binascii.unhexlify(rows[0][0]) )
 
-                #extracting email
+                #extracting emails
+                # retrieving emp email and then crafting email to be sent for them
+                emailQuery = "SELECT Email FROM Employees WHERE Employee = ?"
+                cursor.execute(emailQuery,(employee,))
+                rows = cursor.fetchall()
+
+                empEmail = decrypt_data(binascii.unhexlify(rows[0][0]))
+
+                #craft email
+                eSubject = f"Order ID: {requestID} has been submitted for approval from finance department"
+                body = (
+                    f"Employee: {empNameDec} with ID: {decrypt_data(binascii.unhexlify(current_user.id))}, has requested the following:"
+                    f"\n Item: {item}" 
+                    f"\n Price: {str(price)} \n "
+                    f"Quantity: {quantity} \n " 
+                    f"time requested: {employeeTimeRequest} \n "
+                    f"Please log into the application to review."    
+                )
+                recipient = empEmail
+
+                #sending email
+                send_email(eSubject,body, sender, recipient, app_password)
+
+
                 # retrieving manager email and then crafting email to be sent for them
                 emailQuery = "SELECT Email FROM Employees WHERE EmployeeType = 'c7e617bbe021a2bf2bf1c2b7613bd0aa620c4741028bd01e8d6718037f83dd28'"
                 cursor.execute(emailQuery)
                 rows = cursor.fetchall()
+                
 
                 #must test in Albert's machine
                 finEmail = decrypt_data( binascii.unhexlify(rows[0][0]) )
@@ -473,6 +520,7 @@ def managerSubmit():
             print(f"Error: {e}")
    
     return render_template('managerSubmit.html')
+
 
 @app.route('/manager')
 @role_required('Manager')
@@ -636,9 +684,9 @@ def approve_item(id):
         #craft email to fin
         eSubject = f"Order: {id} has been approved by a manager"
         body = (
-        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
-        f"Time approved: {managerTimeRequest}"
-        f"Item: {itemDec}" 
+        f"\nManager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"\nTime approved: {managerTimeRequest}"
+        f"\nItem: {itemDec}" 
         f"\n Price: {priceDec} \n "
         f"Quantity: {quantityDec} \n " 
         f"time requested: {empSubmitTimeDec} \n "
@@ -659,9 +707,9 @@ def approve_item(id):
 
         eSubject = f" Your Order: {id} has been approved by a manager"
         body = (
-        f"Manager: {decrypt_data(binascii.unhexlify(managerName))} "
-        f"Time approved: {managerTimeRequest}"
-        f"Item: {itemDec}" 
+        f"\nManager: {decrypt_data(binascii.unhexlify(managerName))} "
+        f"\nTime approved: {managerTimeRequest}"
+        f"\nItem: {itemDec}" 
         f"\n Price: {priceDec} \n "
         f"Quantity: {quantityDec} \n " 
         f"time requested: {empSubmitTimeDec} \n "
@@ -965,10 +1013,10 @@ def purchase_item(id):
             if( valid_signature_mgr and valid_signature_emp): 
                 eSubject = f"Order: {id} has been completely approved"
                 body = (
-                   f"Manager: {decrypt_data(binascii.unhexlify(mgrName))} "
-                   f"Manager Time approved: {mgrTimeStampDec}"
-                   f"Employee Name: {empNameDec}"
-                   f"Item: {itemDec}" 
+                   f"\nManager: {decrypt_data(binascii.unhexlify(mgrName))} "
+                   f"\nManager Time approved: {mgrTimeStampDec}"
+                   f"\nEmployee Name: {empNameDec}"
+                   f"\nItem: {itemDec}" 
                    f"\n Price: {priceDec} \n "
                    f"Quantity: {quantityDec} \n " 
                    f"time requested: {empSubmitTimeDec} \n "    
@@ -1043,9 +1091,9 @@ def purchase_item(id):
             if(valid_signature_emp):
                 eSubject = f" Order: {id} has been completely approved"
                 body = (
-                f"Item: {itemDec}" 
+                f"\nItem: {itemDec}" 
                 f"\n Price: {priceDec} \n "
-                f"Quantity: {quantityDec} \n " 
+                f"\nQuantity: {quantityDec} \n " 
                 f"time requested: {empSubmitTimeDec} \n "
                 f"Please log into the application to review."    
                 )
@@ -1124,10 +1172,10 @@ def decline_item(id):
 
             eSubject = f"Order: {id} has been denied by financial department"
             body = (
-                   f"Manager: {decrypt_data(binascii.unhexlify(mgrName))} "
-                   f"Manager Time approved: {mgrTimeStampDec}"
-                   f"Employee Name: {empNameDec}"
-                   f"Item: {itemDec}" 
+                   f"\nManager: {decrypt_data(binascii.unhexlify(mgrName))} "
+                   f"\nManager Time approved: {mgrTimeStampDec}"
+                   f"\nEmployee Name: {empNameDec}"
+                   f"\nItem: {itemDec}" 
                    f"\n Price: {priceDec} \n "
                    f"Quantity: {quantityDec} \n " 
                    f"time requested: {empSubmitTimeDec} \n "    
